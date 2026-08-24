@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from estimate_maestro.store import ESTIMATES_LOG, Store
+from estimate_maestro.store import ESTIMATES_LOG, MalformedRecord, Store, _encode
 
 
 @pytest.fixture
@@ -72,3 +72,19 @@ def test_listing_efforts_returns_them_sorted(store: Store):
     store.create_effort("2026-08-01-a", {"title": "A"})
 
     assert store.list_efforts() == ["2026-08-01-a", "2026-08-24-b"]
+
+
+def test_read_lines_raises_with_line_number_for_malformed_record(store: Store):
+    store.create_effort("2026-08-24-thing", {"title": "Thing"})
+    log_path = store.effort_directory("2026-08-24-thing") / ESTIMATES_LOG
+    log_path.write_text('{"pass": "good"}\n{broken json here\n{"pass": "also good"}\n')
+
+    with pytest.raises(MalformedRecord) as exc_info:
+        store.read("2026-08-24-thing", ESTIMATES_LOG)
+
+    assert "2" in str(exc_info.value)
+
+
+def test_encode_raises_type_error_for_unsupported_type():
+    with pytest.raises(TypeError):
+        _encode(object())

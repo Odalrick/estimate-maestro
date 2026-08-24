@@ -15,6 +15,10 @@ EFFORTS_DIRECTORY = "efforts"
 SNAPSHOTS_DIRECTORY = "snapshots"
 
 
+class MalformedRecord(ValueError):
+    pass
+
+
 def _encode(value: Any) -> Any:
     if isinstance(value, datetime | date):
         return value.isoformat()
@@ -51,14 +55,29 @@ class Store:
         line = json.dumps(record, default=_encode) + "\n"
         with path.open("a", encoding="utf-8") as handle:
             fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
-            handle.write(line)
-            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+            try:
+                handle.write(line)
+            finally:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
     def _read_lines(self, path: Path) -> list[dict[str, Any]]:
         if not path.exists():
             return []
         with path.open(encoding="utf-8") as handle:
-            return [json.loads(line) for line in handle if line.strip()]
+            fcntl.flock(handle.fileno(), fcntl.LOCK_SH)
+            try:
+                records = []
+                for line_number, line in enumerate(handle, start=1):
+                    if line.strip():
+                        try:
+                            records.append(json.loads(line))
+                        except json.JSONDecodeError as error:
+                            raise MalformedRecord(
+                                f"malformed JSON at {path}:{line_number}"
+                            ) from error
+                return records
+            finally:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
     def append(self, effort: str, log_name: str, record: dict[str, Any]) -> None:
         self._append_line(self.effort_directory(effort) / log_name, record)
