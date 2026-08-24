@@ -1,0 +1,37 @@
+[project]
+name = "estimate-maestro"
+version = "0.1.0"
+description = "Personal MCP server for recording estimates and wall time, for later calibration."
+readme = "README.md"
+authors = [{ name = "Odalrick", email = "odalrick@gmail.com" }]
+license = { text = "MIT" }
+requires-python = ">=3.14"
+dependencies = [
+    "mcp[cli]>=1.27.1",
+    "pydantic>=2.13.4",
+]
+
+[project.scripts]
+estimate-maestro = "estimate_maestro.__main__:main"
+
+[build-system]
+requires = ["uv_build>=0.11.6,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pyright>=1.1.409",
+    "pytest>=9.0.3",
+    "ruff>=0.15.13",
+]
+
+[tool.pytest.ini_options]
+python_files = ["*_test.py"]
+testpaths = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "RUF"]
