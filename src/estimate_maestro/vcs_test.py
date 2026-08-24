@@ -1,3 +1,4 @@
+import shutil
 import subprocess
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -186,6 +187,69 @@ def test_a_subject_cannot_forge_a_numstat_row_with_a_carriage_return(tmp_path: P
 
     assert len(harvested) == 1
     assert [record.subject for record in harvested] == ["before\r5\t3\tfake.txt"]
+    assert harvested[0].files_changed == 1
+    assert harvested[0].insertions == 1
+    assert harvested[0].deletions == 0
+
+
+def test_a_subject_stored_in_a_non_utf_8_encoding_round_trips_correctly(tmp_path: Path):
+    # i18n.logOutputEncoding defaults to i18n.commitEncoding, not to UTF-8, so
+    # without forcing it git emits latin-1 bytes here and the subject would be
+    # recorded with replacement characters instead of the real ones.
+    path = tmp_path / "repo"
+    path.mkdir()
+    git(path, "init", "-b", "main")
+    git(path, "config", "user.email", "test@example.com")
+    git(path, "config", "user.name", "Test")
+    git(path, "config", "i18n.commitEncoding", "ISO-8859-1")
+    (path / "message.txt").write_bytes("kafé pausé\n".encode("iso-8859-1"))
+    (path / "file.txt").write_text("line\n")
+    git(path, "add", "file.txt")
+    git(path, "commit", "-F", "message.txt", moment=BASE)
+
+    harvested = commits_between(
+        path, since=BASE - timedelta(minutes=1), until=BASE + timedelta(hours=1)
+    )
+
+    assert len(harvested) == 1
+    assert [record.subject for record in harvested] == ["kafé pausé"]
+    assert "�" not in harvested[0].subject
+    assert harvested[0].files_changed == 1
+    assert harvested[0].insertions == 1
+    assert harvested[0].deletions == 0
+
+
+def test_a_signed_commit_is_harvested_when_log_show_signature_is_set(tmp_path: Path):
+    # log.showSignature makes git prepend signature text to stdout ahead of
+    # the --format output, which would land where the authored date is read.
+    if shutil.which("ssh-keygen") is None:
+        pytest.skip("ssh-keygen is needed to create a signed commit")
+    key = tmp_path / "signing-key"
+    subprocess.run(
+        ["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", str(key), "-C", "test"],
+        check=True,
+        capture_output=True,
+    )
+    path = tmp_path / "repo"
+    path.mkdir()
+    git(path, "init", "-b", "main")
+    git(path, "config", "user.email", "test@example.com")
+    git(path, "config", "user.name", "Test")
+    git(path, "config", "gpg.format", "ssh")
+    git(path, "config", "user.signingkey", str(key.with_suffix(".pub")))
+    git(path, "config", "commit.gpgsign", "true")
+    git(path, "config", "log.showSignature", "true")
+    (path / "file.txt").write_text("line\n")
+    git(path, "add", ".")
+    git(path, "commit", "-m", "signed subject", moment=BASE)
+
+    harvested = commits_between(
+        path, since=BASE - timedelta(minutes=1), until=BASE + timedelta(hours=1)
+    )
+
+    assert len(harvested) == 1
+    assert [record.subject for record in harvested] == ["signed subject"]
+    assert harvested[0].authored_at == BASE
     assert harvested[0].files_changed == 1
     assert harvested[0].insertions == 1
     assert harvested[0].deletions == 0

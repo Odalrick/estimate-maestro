@@ -24,18 +24,37 @@ class CommitRecord:
 
 
 def _git(path: Path, *arguments: str) -> str | None:
-    # Deliberately not text=True. Text mode applies universal-newline
-    # translation, which rewrites a lone \r in git's output into a \n. Git
-    # stores and emits a raw \r inside a commit subject unescaped, so under
-    # text mode a subject arrives carrying a line break it does not actually
-    # contain, and every line-positional parse below silently shifts. Decoding
-    # the raw bytes ourselves keeps a \r a \r, where it can never manufacture
-    # a line boundary. errors="replace" because a decode failure here would
-    # escape the three exception types this function swallows and abort a
-    # whole clock-out; best effort matches the posture of the rest of the
-    # function.
+    # Two deliberate choices here, both load-bearing for the correctness of
+    # every record this module writes.
+    #
+    # i18n.logOutputEncoding forces git to transcode message text to UTF-8 on
+    # output. Git re-encodes to i18n.logOutputEncoding, which defaults to
+    # i18n.commitEncoding rather than to UTF-8 — so a repository configured
+    # with, say, ISO-8859-1 emits latin-1 bytes, and decoding those as UTF-8
+    # would record a real commit under its real hash with a mangled subject.
+    # Forcing the encoding makes git do the transcoding it already knows how
+    # to do, and the decode below becomes lossless.
+    #
+    # Not text=True, because text mode applies universal-newline translation,
+    # which rewrites a lone \r in git's output into a \n. Git stores and emits
+    # a raw \r inside a commit subject unescaped, so under text mode a subject
+    # arrives carrying a line break it does not actually contain, and every
+    # line-positional parse below silently shifts. Decoding the raw bytes
+    # ourselves keeps a \r a \r, where it can never manufacture a line
+    # boundary.
+    #
+    # errors="replace" is the backstop underneath the forced encoding, and
+    # should never fire once git is transcoding. If it somehow does, a
+    # replacement character beats a UnicodeDecodeError escaping the three
+    # exception types this function swallows and aborting a whole clock-out.
+    # Correct first, survivable second.
     try:
-        completed = subprocess.run(["git", *arguments], cwd=path, check=True, capture_output=True)
+        completed = subprocess.run(
+            ["git", "-c", "i18n.logOutputEncoding=UTF-8", *arguments],
+            cwd=path,
+            check=True,
+            capture_output=True,
+        )
     except subprocess.CalledProcessError, FileNotFoundError, NotADirectoryError:
         return None
     return completed.stdout.decode("utf-8", errors="replace")
@@ -75,9 +94,20 @@ def _commit_detail(path: Path, identifier: str) -> CommitRecord | None:
     # message's first line in the git object, but it can still contain a
     # raw \r, which universal-newline translation would turn into a real
     # line break here and shift every line after it.
-    output = _git(path, "show", "--numstat", "--format=%aI%n%s", identifier)
+    # --no-show-signature because log.showSignature is an ordinary user
+    # setting, and under it git prepends signature text to stdout ahead of
+    # the --format output ("Good \"git\" signature for ..." on a verifiable
+    # signature, "No signature" when verification cannot be performed).
+    # That would land in lines[0] where the authored date belongs.
+    output = _git(path, "show", "--no-show-signature", "--numstat", "--format=%aI%n%s", identifier)
     if output is None:
         return None
+    # split("\n"), never splitlines(). splitlines() also breaks on \x0b, \x0c,
+    # \x1c, \x1d, \x1e, \x85, \u2028 and \u2029, every one of which git passes
+    # through a commit subject untouched. Swapping this for splitlines() would
+    # read as a harmless modernisation and would silently reopen the entire
+    # class of defect this parse exists to close: a subject able to forge a
+    # line boundary, and with it a numstat row.
     lines = output.split("\n")
     if len(lines) < 2:
         return None
@@ -105,6 +135,7 @@ def commits_between(path: Path, since: datetime, until: datetime) -> list[Commit
     output = _git(
         path,
         "log",
+        "--no-show-signature",
         f"--since={since.isoformat()}",
         f"--until={until.isoformat()}",
         "--reverse",
@@ -114,7 +145,8 @@ def commits_between(path: Path, since: datetime, until: datetime) -> list[Commit
         return []
     # A commit hash is 40 hex characters: it cannot contain a newline or
     # any other separator, so this list is unforgeable no matter what a
-    # commit's subject contains.
+    # commit's subject contains. split("\n") rather than splitlines() for the
+    # reason spelled out in _commit_detail.
     identifiers = [line for line in output.split("\n") if line.strip()]
     harvested: list[CommitRecord] = []
     for identifier in identifiers:
