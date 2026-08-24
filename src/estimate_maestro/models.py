@@ -70,6 +70,12 @@ class Vcs(StrEnum):
     OTHER = "other"
 
 
+class CommitEvent(StrEnum):
+    HARVESTED = "harvested"
+    LANDED = "landed"
+    REMAP = "remap"
+
+
 class Estimate(BaseModel):
     scale: Scale = Scale.POINTS
     optimistic: float

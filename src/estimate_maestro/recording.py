@@ -15,6 +15,7 @@ from estimate_maestro.errors import (
 from estimate_maestro.identifiers import effort_identifier, new_identifier
 from estimate_maestro.models import (
     AbsenceKind,
+    CommitEvent,
     EffortStatus,
     Estimate,
     EstimatePass,
@@ -336,12 +337,13 @@ class Recorder:
     ) -> Acknowledgement:
         reference = detect_repository(path)
         if reference is None:
-            return Acknowledgement(recorded="commits", identifier="none")
+            return Acknowledgement(recorded="no_repository", identifier="none")
         for commit in commits_between(path, since, until):
             self.store.append(
                 effort,
                 COMMITS_LOG,
                 {
+                    "event": CommitEvent.HARVESTED,
                     "vcs": reference.vcs,
                     "repository": reference.repository,
                     "reference": reference.reference,
@@ -352,7 +354,6 @@ class Recorder:
                     "files_changed": commit.files_changed,
                     "insertions": commit.insertions,
                     "deletions": commit.deletions,
-                    "anchor": "branch",
                 },
             )
 
@@ -370,11 +371,11 @@ class Recorder:
             effort,
             COMMITS_LOG,
             {
+                "event": CommitEvent.LANDED,
                 "vcs": Vcs.GIT,
                 "repository": repository,
                 "slice": work_slice,
                 "identifier": identifier,
-                "anchor": "landed",
                 "at": self.now(),
             },
         )
@@ -384,6 +385,12 @@ class Recorder:
         self.store.append(
             effort,
             COMMITS_LOG,
-            {"event": "remap", "old": old, "new": new, "reason": reason, "at": self.now()},
+            {
+                "event": CommitEvent.REMAP,
+                "old": old,
+                "new": new,
+                "reason": reason,
+                "at": self.now(),
+            },
         )
         return Acknowledgement(recorded="remap", identifier=new)

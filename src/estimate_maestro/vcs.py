@@ -69,7 +69,7 @@ def commits_between(path: Path, since: datetime, until: datetime) -> list[Commit
         f"--until={until.isoformat()}",
         "--reverse",
         "--numstat",
-        f"--pretty=format:{RECORD_SEPARATOR}%H{FIELD_SEPARATOR}%s{FIELD_SEPARATOR}%aI",
+        f"--pretty=format:{RECORD_SEPARATOR}%H{FIELD_SEPARATOR}%aI{FIELD_SEPARATOR}%s",
     )
     if not output:
         return []
@@ -78,7 +78,16 @@ def commits_between(path: Path, since: datetime, until: datetime) -> list[Commit
         if not block.strip():
             continue
         lines = block.strip("\n").split("\n")
-        identifier, subject, authored = lines[0].split(FIELD_SEPARATOR)
+        try:
+            identifier, authored, subject = lines[0].split(FIELD_SEPARATOR, 2)
+        except ValueError:
+            # A subject containing the record or field separator byte corrupts
+            # this one block's parse. Skip only this commit rather than losing
+            # every commit in the window: git is still there to re-harvest.
+            continue
+        # A merge commit legitimately has no numstat rows under --numstat, so
+        # files_changed == insertions == deletions == 0 for one is git's own
+        # semantics, not a parser bug.
         files_changed, insertions, deletions = _parse_numstat(lines[1:])
         harvested.append(
             CommitRecord(

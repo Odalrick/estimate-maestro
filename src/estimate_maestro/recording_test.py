@@ -423,11 +423,47 @@ def test_harvesting_records_commits_against_the_slice(recorder, plan, tmp_path):
 
     commits = recorder.store.read(effort, COMMITS_LOG)
 
+    assert commits[0]["event"] == "harvested"
     assert commits[0]["subject"] == "work"
     assert commits[0]["slice"] == work_slice
     assert commits[0]["vcs"] == "git"
     assert commits[0]["repository"] == "repo"
     assert recorder.store.read_meta(effort)["repositories"] == ["repo"]
+
+
+def test_a_harvest_against_a_non_repository_reports_no_repository(recorder, plan, tmp_path):
+    from estimate_maestro.store import COMMITS_LOG
+
+    effort = start(recorder, plan, ["Enum"]).identifier
+    work_slice = recorder.store.read(effort, SLICES_LOG)[0]["slice"]
+    nowhere = tmp_path / "nowhere"
+
+    acknowledgement = recorder.harvest_commits(
+        effort, work_slice, nowhere, since=FROZEN - timedelta(days=1), until=FROZEN
+    )
+
+    assert acknowledgement.recorded == "no_repository"
+    assert recorder.store.read(effort, COMMITS_LOG) == []
+
+
+def test_recording_a_landed_commit_writes_the_durable_anchor(recorder, plan):
+    from estimate_maestro.store import COMMITS_LOG
+
+    effort = start(recorder, plan, ["Enum"]).identifier
+    work_slice = recorder.store.read(effort, SLICES_LOG)[0]["slice"]
+
+    acknowledgement = recorder.record_landed_commit(
+        effort, work_slice, repository="repo", identifier="deadbeef"
+    )
+
+    landed = recorder.store.read(effort, COMMITS_LOG)[-1]
+
+    assert acknowledgement.recorded == "commit"
+    assert acknowledgement.identifier == "deadbeef"
+    assert landed["event"] == "landed"
+    assert landed["repository"] == "repo"
+    assert landed["identifier"] == "deadbeef"
+    assert landed["vcs"] == "git"
 
 
 def test_remapping_appends_rather_than_overwriting(recorder, plan):

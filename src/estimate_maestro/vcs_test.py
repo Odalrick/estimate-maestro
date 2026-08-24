@@ -75,3 +75,40 @@ def test_a_diffstat_is_captured(repository: Path):
     assert harvested[0].files_changed == 1
     assert harvested[0].insertions == 1
     assert harvested[0].deletions == 0
+
+
+def test_a_subject_containing_the_field_separator_survives_intact(tmp_path: Path):
+    path = tmp_path / "repo"
+    path.mkdir()
+    git(path, "init", "-b", "main")
+    git(path, "config", "user.email", "test@example.com")
+    git(path, "config", "user.name", "Test")
+    (path / "file.txt").write_text("line\n")
+    git(path, "add", ".")
+    git(path, "commit", "-m", "before\x1fafter", moment=BASE)
+
+    harvested = commits_between(
+        path, since=BASE - timedelta(minutes=1), until=BASE + timedelta(hours=1)
+    )
+
+    assert [record.subject for record in harvested] == ["before\x1fafter"]
+
+
+def test_a_subject_containing_the_record_separator_costs_only_itself(tmp_path: Path):
+    path = tmp_path / "repo"
+    path.mkdir()
+    git(path, "init", "-b", "main")
+    git(path, "config", "user.email", "test@example.com")
+    git(path, "config", "user.name", "Test")
+    for index, subject in enumerate(["commit 0", "before\x1eafter", "commit 2"]):
+        (path / f"file{index}.txt").write_text(f"line {index}\n")
+        git(path, "add", ".")
+        git(path, "commit", "-m", subject, moment=BASE + timedelta(hours=index))
+
+    harvested = commits_between(
+        path, since=BASE - timedelta(minutes=1), until=BASE + timedelta(hours=5)
+    )
+
+    subjects = [record.subject for record in harvested]
+    assert "commit 0" in subjects
+    assert "commit 2" in subjects
