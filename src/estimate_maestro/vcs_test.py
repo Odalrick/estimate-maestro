@@ -141,3 +141,51 @@ def test_a_subject_containing_both_separators_together_is_harvested_intact(tmp_p
     assert harvested[1].files_changed == 1
     assert harvested[1].insertions == 1
     assert harvested[1].deletions == 0
+
+
+def test_a_subject_containing_a_carriage_return_survives_intact(tmp_path: Path):
+    # Git emits a raw \r inside a subject unescaped. Decoding git's output
+    # under universal-newline translation would turn it into a line break and
+    # truncate the subject at it.
+    path = tmp_path / "repo"
+    path.mkdir()
+    git(path, "init", "-b", "main")
+    git(path, "config", "user.email", "test@example.com")
+    git(path, "config", "user.name", "Test")
+    (path / "file.txt").write_text("line\n")
+    git(path, "add", ".")
+    git(path, "commit", "-m", "before\rafter", moment=BASE)
+
+    harvested = commits_between(
+        path, since=BASE - timedelta(minutes=1), until=BASE + timedelta(hours=1)
+    )
+
+    assert len(harvested) == 1
+    assert [record.subject for record in harvested] == ["before\rafter"]
+    assert harvested[0].files_changed == 1
+    assert harvested[0].insertions == 1
+    assert harvested[0].deletions == 0
+
+
+def test_a_subject_cannot_forge_a_numstat_row_with_a_carriage_return(tmp_path: Path):
+    # The forgery case: a \r followed by text shaped exactly like a numstat
+    # row. If the \r ever became a line break, this line would be parsed as a
+    # real diff row and fold attacker-chosen numbers into the true diffstat.
+    path = tmp_path / "repo"
+    path.mkdir()
+    git(path, "init", "-b", "main")
+    git(path, "config", "user.email", "test@example.com")
+    git(path, "config", "user.name", "Test")
+    (path / "file.txt").write_text("line\n")
+    git(path, "add", ".")
+    git(path, "commit", "-m", "before\r5\t3\tfake.txt", moment=BASE)
+
+    harvested = commits_between(
+        path, since=BASE - timedelta(minutes=1), until=BASE + timedelta(hours=1)
+    )
+
+    assert len(harvested) == 1
+    assert [record.subject for record in harvested] == ["before\r5\t3\tfake.txt"]
+    assert harvested[0].files_changed == 1
+    assert harvested[0].insertions == 1
+    assert harvested[0].deletions == 0
