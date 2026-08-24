@@ -71,7 +71,7 @@ class Estimate(BaseModel):
     pessimistic: float
 
     @model_validator(mode="after")
-    def _check_ordering(self) -> "Estimate":  # noqa: UP037
+    def _check_ordering(self) -> Estimate:
         if not self.optimistic <= self.likely <= self.pessimistic:
             raise ValueError("expected optimistic <= likely <= pessimistic")
         return self
