@@ -380,3 +380,69 @@ def test_an_absence_is_recorded_at_the_store_root(recorder, plan):
 
     assert absences[0]["kind"] == "appointment"
     assert absences[0]["note"] == "dentist"
+
+
+def test_harvesting_records_commits_against_the_slice(recorder, plan, tmp_path):
+    import subprocess
+
+    from estimate_maestro.store import COMMITS_LOG
+
+    effort = start(recorder, plan, ["Enum"]).identifier
+    work_slice = recorder.store.read(effort, SLICES_LOG)[0]["slice"]
+    repository = tmp_path / "repo"
+    repository.mkdir()
+    for arguments in (
+        ["init", "-b", "main"],
+        ["config", "user.email", "test@example.com"],
+        ["config", "user.name", "Test"],
+    ):
+        subprocess.run(["git", *arguments], cwd=repository, check=True, capture_output=True)
+    (repository / "a.txt").write_text("a\n")
+    subprocess.run(["git", "add", "."], cwd=repository, check=True, capture_output=True)
+    stamp = FROZEN.isoformat()
+    subprocess.run(
+        ["git", "commit", "-m", "work"],
+        cwd=repository,
+        check=True,
+        capture_output=True,
+        env={
+            "GIT_AUTHOR_DATE": stamp,
+            "GIT_COMMITTER_DATE": stamp,
+            "PATH": "/usr/bin:/bin",
+            "HOME": str(tmp_path),
+        },
+    )
+
+    recorder.harvest_commits(
+        effort,
+        work_slice,
+        repository,
+        since=FROZEN - timedelta(days=1),
+        until=FROZEN + timedelta(days=1),
+    )
+
+    commits = recorder.store.read(effort, COMMITS_LOG)
+
+    assert commits[0]["subject"] == "work"
+    assert commits[0]["slice"] == work_slice
+    assert commits[0]["vcs"] == "git"
+    assert commits[0]["repository"] == "repo"
+    assert recorder.store.read_meta(effort)["repositories"] == ["repo"]
+
+
+def test_remapping_appends_rather_than_overwriting(recorder, plan):
+    from estimate_maestro.store import COMMITS_LOG
+
+    effort = start(recorder, plan, ["Enum"]).identifier
+
+    recorder.remap_commits(effort, old="aaaa", new="bbbb", reason="rebase")
+
+    remap = recorder.store.read(effort, COMMITS_LOG)[-1]
+
+    assert remap == {
+        "event": "remap",
+        "old": "aaaa",
+        "new": "bbbb",
+        "reason": "rebase",
+        "at": FROZEN.isoformat(),
+    }

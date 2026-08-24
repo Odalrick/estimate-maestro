@@ -24,11 +24,13 @@ from estimate_maestro.models import (
     Provenance,
     SliceEvent,
     SlicePhase,
+    Vcs,
 )
 from estimate_maestro.projection import live_slices, slice_count
 from estimate_maestro.responses import Acknowledgement
 from estimate_maestro.status import find_open_interval
-from estimate_maestro.store import ESTIMATES_LOG, INTERVALS_LOG, SLICES_LOG, Store
+from estimate_maestro.store import COMMITS_LOG, ESTIMATES_LOG, INTERVALS_LOG, SLICES_LOG, Store
+from estimate_maestro.vcs import commits_between, detect_repository
 
 
 def _now() -> datetime:
@@ -328,3 +330,60 @@ class Recorder:
             record["note"] = note
         self.store.append_absence(record)
         return Acknowledgement(recorded="absence", identifier=identifier)
+
+    def harvest_commits(
+        self, effort: str, work_slice: str | None, path: Path, since: datetime, until: datetime
+    ) -> Acknowledgement:
+        reference = detect_repository(path)
+        if reference is None:
+            return Acknowledgement(recorded="commits", identifier="none")
+        for commit in commits_between(path, since, until):
+            self.store.append(
+                effort,
+                COMMITS_LOG,
+                {
+                    "vcs": reference.vcs,
+                    "repository": reference.repository,
+                    "reference": reference.reference,
+                    "slice": work_slice,
+                    "identifier": commit.identifier,
+                    "subject": commit.subject,
+                    "authored_at": commit.authored_at,
+                    "files_changed": commit.files_changed,
+                    "insertions": commit.insertions,
+                    "deletions": commit.deletions,
+                    "anchor": "branch",
+                },
+            )
+
+        def add_repository(meta: dict[str, Any]) -> None:
+            if reference.repository not in meta["repositories"]:
+                meta["repositories"].append(reference.repository)
+
+        self.store.update_meta(effort, add_repository)
+        return Acknowledgement(recorded="commits", identifier=effort)
+
+    def record_landed_commit(
+        self, effort: str, work_slice: str | None, repository: str, identifier: str
+    ) -> Acknowledgement:
+        self.store.append(
+            effort,
+            COMMITS_LOG,
+            {
+                "vcs": Vcs.GIT,
+                "repository": repository,
+                "slice": work_slice,
+                "identifier": identifier,
+                "anchor": "landed",
+                "at": self.now(),
+            },
+        )
+        return Acknowledgement(recorded="commit", identifier=identifier)
+
+    def remap_commits(self, effort: str, old: str, new: str, reason: str) -> Acknowledgement:
+        self.store.append(
+            effort,
+            COMMITS_LOG,
+            {"event": "remap", "old": old, "new": new, "reason": reason, "at": self.now()},
+        )
+        return Acknowledgement(recorded="remap", identifier=new)
