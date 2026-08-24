@@ -46,3 +46,18 @@ def test_a_malformed_time_is_rejected_with_the_variable_named():
         assert "ESTIMATE_MAESTRO_DAY_START" in str(error)
     else:
         raise AssertionError("expected a ValueError")
+
+
+def test_a_lead_in_longer_than_the_session_gap_is_rejected_naming_both_variables():
+    try:
+        load_config(
+            {
+                "ESTIMATE_MAESTRO_DERIVE_LEAD_IN_MINUTES": "180",
+                "ESTIMATE_MAESTRO_DERIVE_SESSION_GAP_MINUTES": "120",
+            }
+        )
+    except ValueError as error:
+        assert "ESTIMATE_MAESTRO_DERIVE_LEAD_IN_MINUTES" in str(error)
+        assert "ESTIMATE_MAESTRO_DERIVE_SESSION_GAP_MINUTES" in str(error)
+    else:
+        raise AssertionError("expected a ValueError")

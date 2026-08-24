@@ -16,7 +16,9 @@ class MeasuredInterval:
     kind: IntervalKind
 
 
-def _absent_seconds(measured: MeasuredInterval, absences: list[dict[str, Any]]) -> float:
+def _absent_seconds(
+    measured: MeasuredInterval, absences: list[dict[str, Any]], hours: WorkingHours
+) -> float:
     clipped: list[tuple[datetime, datetime]] = []
     for absence in absences:
         overlap = overlap_seconds(
@@ -40,6 +42,8 @@ def _absent_seconds(measured: MeasuredInterval, absences: list[dict[str, Any]]) 
         else:
             merged.append((start, stop))
 
+    if measured.provenance is Provenance.DERIVED_FROM_COMMITS:
+        return sum(working_seconds_between(start, stop, hours) for start, stop in merged)
     return sum((stop - start).total_seconds() for start, stop in merged)
 
 
@@ -84,5 +88,5 @@ def wall_seconds(
             duration = working_seconds_between(measured.start, measured.stop, hours)
         else:
             duration = max(0.0, (measured.stop - measured.start).total_seconds())
-        total += max(0.0, duration - _absent_seconds(measured, absences))
+        total += max(0.0, duration - _absent_seconds(measured, absences, hours))
     return total

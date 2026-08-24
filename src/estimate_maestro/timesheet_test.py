@@ -28,6 +28,16 @@ def interval(start: datetime, stop: datetime) -> MeasuredInterval:
     )
 
 
+def derived_interval(start: datetime, stop: datetime) -> MeasuredInterval:
+    return MeasuredInterval(
+        start=start,
+        stop=stop,
+        provenance=Provenance.DERIVED_FROM_COMMITS,
+        work_slice=None,
+        kind=IntervalKind.WORK,
+    )
+
+
 def test_wall_time_is_the_sum_of_interval_durations():
     intervals = [interval(at(9), at(11)), interval(at(13), at(14))]
 
@@ -210,6 +220,7 @@ def test_commits_close_together_form_one_session_with_a_lead_in():
     assert derived[0].start == datetime(2026, 8, 24, 9, 30, tzinfo=UTC)
     assert derived[0].stop == datetime(2026, 8, 24, 11, tzinfo=UTC)
     assert derived[0].provenance is Provenance.DERIVED_FROM_COMMITS
+    assert derived[0].work_slice == "sl-01"
 
 
 def test_a_quiet_day_between_commits_splits_the_sessions():
@@ -224,6 +235,7 @@ def test_a_quiet_day_between_commits_splits_the_sessions():
     assert derived[0].start == datetime(2026, 8, 24, 9, 30, tzinfo=UTC)
     assert derived[0].stop == datetime(2026, 8, 24, 11, tzinfo=UTC)
     assert derived[0].provenance is Provenance.DERIVED_FROM_COMMITS
+    assert derived[0].work_slice is None
     assert derived[1].start == datetime(2026, 8, 26, 9, 30, tzinfo=UTC)
     assert derived[1].stop == datetime(2026, 8, 26, 12, tzinfo=UTC)
     assert derived[1].provenance is Provenance.DERIVED_FROM_COMMITS
@@ -247,3 +259,22 @@ def test_manual_time_is_not_measured_in_working_hours():
     )
 
     assert measured == pytest.approx(3 * 3600)
+
+
+def test_an_out_of_hours_absence_deducts_nothing_from_a_derived_interval():
+    # Raw span 08:00-20:00 measures as 7h of working time (09:00-17:00 less lunch).
+    # An absence entirely after the workday was never counted, so it must not
+    # subtract from the 7h -- it would otherwise be deducted on the raw clock.
+    session = derived_interval(at(8), at(20))
+    absences = [{"start": at(18).isoformat(), "stop": at(19).isoformat(), "kind": "appointment"}]
+
+    assert wall_seconds([session], absences, hours=CONFIG.working_hours) == pytest.approx(7 * 3600)
+
+
+def test_an_in_hours_absence_deducts_its_working_overlap_from_a_derived_interval():
+    # Same 7h-working derived session, but this absence falls inside the working
+    # window, so it must still be deducted in full.
+    session = derived_interval(at(8), at(20))
+    absences = [{"start": at(10).isoformat(), "stop": at(11).isoformat(), "kind": "appointment"}]
+
+    assert wall_seconds([session], absences, hours=CONFIG.working_hours) == pytest.approx(6 * 3600)

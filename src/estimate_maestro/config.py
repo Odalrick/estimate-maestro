@@ -68,17 +68,25 @@ def load_config(environment: Mapping[str, str]) -> Config:
         ),
     )
     store = environment.get("ESTIMATE_MAESTRO_STORE", DEFAULT_STORE_PATH)
+    derive_lead_in = _read_minutes(
+        environment, "ESTIMATE_MAESTRO_DERIVE_LEAD_IN_MINUTES", timedelta(minutes=30)
+    )
+    derive_session_gap = _read_minutes(
+        environment, "ESTIMATE_MAESTRO_DERIVE_SESSION_GAP_MINUTES", timedelta(hours=2)
+    )
+    if derive_lead_in > derive_session_gap:
+        raise ValueError(
+            "ESTIMATE_MAESTRO_DERIVE_LEAD_IN_MINUTES must not exceed "
+            "ESTIMATE_MAESTRO_DERIVE_SESSION_GAP_MINUTES: "
+            f"{derive_lead_in} > {derive_session_gap}"
+        )
     return Config(
         store_path=Path(store).expanduser(),
         working_hours=working_hours,
         off_hours_session_cap=_read_minutes(
             environment, "ESTIMATE_MAESTRO_OFF_HOURS_SESSION_CAP_MINUTES", timedelta(hours=4)
         ),
-        derive_lead_in=_read_minutes(
-            environment, "ESTIMATE_MAESTRO_DERIVE_LEAD_IN_MINUTES", timedelta(minutes=30)
-        ),
-        derive_session_gap=_read_minutes(
-            environment, "ESTIMATE_MAESTRO_DERIVE_SESSION_GAP_MINUTES", timedelta(hours=2)
-        ),
+        derive_lead_in=derive_lead_in,
+        derive_session_gap=derive_session_gap,
         minimum_efforts_for_analysis=int(environment.get("ESTIMATE_MAESTRO_MINIMUM_EFFORTS", "5")),
     )
