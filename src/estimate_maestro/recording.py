@@ -2,9 +2,10 @@ import shutil
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from estimate_maestro.config import Config
-from estimate_maestro.errors import EffortAlreadyExists
+from estimate_maestro.errors import EffortAlreadyExists, UnknownSlice
 from estimate_maestro.identifiers import effort_identifier, new_identifier
 from estimate_maestro.models import (
     EffortStatus,
@@ -13,7 +14,7 @@ from estimate_maestro.models import (
     SliceEvent,
     SlicePhase,
 )
-from estimate_maestro.projection import slice_count
+from estimate_maestro.projection import live_slices, slice_count
 from estimate_maestro.responses import Acknowledgement
 from estimate_maestro.store import ESTIMATES_LOG, SLICES_LOG, Store
 
@@ -146,15 +147,16 @@ class Recorder:
         return Acknowledgement(recorded="estimate", identifier=identifier)
 
     def finish_effort(self, effort: str) -> Acknowledgement:
-        meta = self.store.read_meta(effort)
-        meta["status"] = EffortStatus.DONE
-        self.store.write_meta(effort, meta)
+        def mark_done(meta: dict[str, Any]) -> None:
+            meta["status"] = EffortStatus.DONE
+
+        self.store.update_meta(effort, mark_done)
         return Acknowledgement(recorded="effort", identifier=effort)
 
-    def _append_slice_event(self, effort: str, record: dict) -> Acknowledgement:
-        record["at"] = self.now()
-        self.store.append(effort, SLICES_LOG, record)
-        return Acknowledgement(recorded="slice", identifier=record["slice"])
+    def _append_slice_event(self, effort: str, record: dict[str, Any]) -> Acknowledgement:
+        to_append = {**record, "at": self.now()}
+        self.store.append(effort, SLICES_LOG, to_append)
+        return Acknowledgement(recorded="slice", identifier=to_append["slice"])
 
     def add_slice(self, effort: str, title: str) -> Acknowledgement:
         status = self.store.read_meta(effort)["status"]
@@ -170,21 +172,32 @@ class Recorder:
         )
 
     def close_slice(self, effort: str, work_slice: str, pull_request: str) -> Acknowledgement:
-        meta = self.store.read_meta(effort)
-        if pull_request not in meta["pull_requests"]:
-            meta["pull_requests"].append(pull_request)
-            self.store.write_meta(effort, meta)
+        slice_records = self.store.read(effort, SLICES_LOG)
+        if work_slice not in live_slices(slice_records):
+            raise UnknownSlice(work_slice)
+
+        def add_pull_request(meta: dict[str, Any]) -> None:
+            if pull_request not in meta["pull_requests"]:
+                meta["pull_requests"].append(pull_request)
+
+        self.store.update_meta(effort, add_pull_request)
         return self._append_slice_event(
             effort,
             {"event": SliceEvent.CLOSED, "slice": work_slice, "pull_request": pull_request},
         )
 
     def drop_slice(self, effort: str, work_slice: str, reason: str) -> Acknowledgement:
+        slice_records = self.store.read(effort, SLICES_LOG)
+        if work_slice not in live_slices(slice_records):
+            raise UnknownSlice(work_slice)
         return self._append_slice_event(
             effort, {"event": SliceEvent.DROPPED, "slice": work_slice, "reason": reason}
         )
 
     def rename_slice(self, effort: str, work_slice: str, title: str) -> Acknowledgement:
+        slice_records = self.store.read(effort, SLICES_LOG)
+        if work_slice not in live_slices(slice_records):
+            raise UnknownSlice(work_slice)
         return self._append_slice_event(
             effort, {"event": SliceEvent.RENAMED, "slice": work_slice, "title": title}
         )

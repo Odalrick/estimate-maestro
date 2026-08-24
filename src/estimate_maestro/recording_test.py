@@ -206,3 +206,40 @@ def test_renaming_a_slice_appends_rather_than_rewrites(recorder, plan):
     assert len(records) == 2
     assert records[-1]["event"] == "renamed"
     assert records[0]["title"] == "Enum"
+
+
+def test_closing_a_slice_twice_with_the_same_pull_request_deduplicates(recorder, plan):
+    effort = start(recorder, plan, ["Enum"]).identifier
+    work_slice = recorder.store.read(effort, SLICES_LOG)[0]["slice"]
+
+    recorder.close_slice(effort, work_slice, pull_request="add-comply#1104")
+    recorder.close_slice(effort, work_slice, pull_request="add-comply#1104")
+
+    assert recorder.store.read_meta(effort)["pull_requests"] == ["add-comply#1104"]
+
+
+def test_closing_an_unknown_slice_raises_unknown_slice(recorder, plan):
+    from estimate_maestro.errors import UnknownSlice
+
+    effort = start(recorder, plan, ["Enum"]).identifier
+
+    with pytest.raises(UnknownSlice):
+        recorder.close_slice(effort, "sl-9999", pull_request="add-comply#1104")
+
+
+def test_dropping_an_unknown_slice_raises_unknown_slice(recorder, plan):
+    from estimate_maestro.errors import UnknownSlice
+
+    effort = start(recorder, plan, ["Enum"]).identifier
+
+    with pytest.raises(UnknownSlice):
+        recorder.drop_slice(effort, "sl-9999", reason="Already implemented.")
+
+
+def test_renaming_an_unknown_slice_raises_unknown_slice(recorder, plan):
+    from estimate_maestro.errors import UnknownSlice
+
+    effort = start(recorder, plan, ["Enum"]).identifier
+
+    with pytest.raises(UnknownSlice):
+        recorder.rename_slice(effort, "sl-9999", "New title")

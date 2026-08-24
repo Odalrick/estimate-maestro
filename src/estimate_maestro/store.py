@@ -1,5 +1,6 @@
 import fcntl
 import json
+from collections.abc import Callable
 from datetime import date, datetime
 from enum import Enum
 from pathlib import Path
@@ -49,6 +50,22 @@ class Store:
 
     def read_meta(self, effort: str) -> dict[str, Any]:
         return json.loads((self.effort_directory(effort) / META_FILE).read_text(encoding="utf-8"))
+
+    def update_meta(
+        self, effort: str, mutate: Callable[[dict[str, Any]], None]
+    ) -> dict[str, Any]:
+        path = self.effort_directory(effort) / META_FILE
+        with path.open("r+", encoding="utf-8") as handle:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            try:
+                meta = json.loads(handle.read())
+                mutate(meta)
+                handle.seek(0)
+                handle.truncate()
+                handle.write(json.dumps(meta, indent=2, default=_encode) + "\n")
+                return meta
+            finally:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
     def _append_line(self, path: Path, record: dict[str, Any]) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
