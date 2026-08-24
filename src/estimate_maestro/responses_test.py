@@ -37,6 +37,26 @@ def test_the_guard_recurses_into_nested_models():
     assert tainted_field_names(Outer) == ["inner.total_seconds"]
 
 
+def test_the_guard_unwraps_optional_nested_models():
+    class Inner(BaseModel):
+        wall_seconds: float
+
+    class Outer(BaseModel):
+        inner: Inner | None = None
+
+    assert tainted_field_names(Outer) == ["inner.wall_seconds"]
+
+
+def test_the_guard_unwraps_list_of_nested_models():
+    class Inner(BaseModel):
+        total_hours: int
+
+    class Outer(BaseModel):
+        items: list[Inner]
+
+    assert tainted_field_names(Outer) == ["items.total_hours"]
+
+
 def test_current_status_reports_a_timestamp_and_not_an_elapsed():
     status = CurrentStatus(
         effort="2026-08-24-thing",
