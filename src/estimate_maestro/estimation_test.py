@@ -159,24 +159,24 @@ def test_efforts_without_initial_estimates_do_not_consume_the_limit(store: Store
 def test_newest_first_by_creation_time_not_lexical_order(store: Store):
     add(
         store,
-        "2026-08-20-z-newest",
-        "Z Newest",
+        "2026-08-20-a-newest",
+        "A Newest",
         18,
-        "Created last, sorts last lexically.",
+        "Created last, sorts first lexically.",
         "2026-08-20T10:00:00+00:00",
     )
     add(
         store,
-        "2026-08-20-a-oldest",
-        "A Oldest",
+        "2026-08-20-z-oldest",
+        "Z Oldest",
         7,
-        "Created first, sorts first lexically.",
+        "Created first, sorts last lexically.",
         "2026-08-20T08:00:00+00:00",
     )
 
     efforts = [reference.effort for reference in reference_efforts(store)]
 
-    assert efforts.index("2026-08-20-z-newest") < efforts.index("2026-08-20-a-oldest")
+    assert efforts.index("2026-08-20-a-newest") < efforts.index("2026-08-20-z-oldest")
 
 
 def test_one_malformed_record_does_not_prevent_other_efforts_from_returning(store: Store):
