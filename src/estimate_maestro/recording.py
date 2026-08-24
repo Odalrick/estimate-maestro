@@ -14,6 +14,7 @@ from estimate_maestro.errors import (
 )
 from estimate_maestro.identifiers import effort_identifier, new_identifier
 from estimate_maestro.models import (
+    AbsenceKind,
     EffortStatus,
     Estimate,
     EstimatePass,
@@ -311,3 +312,19 @@ class Recorder:
             record["stop"] = stop
         self.store.append(effort, INTERVALS_LOG, record)
         return Acknowledgement(recorded="interval", identifier=interval)
+
+    def record_absence(
+        self, start: datetime, stop: datetime, kind: AbsenceKind, note: str | None = None
+    ) -> Acknowledgement:
+        identifier = self.make_identifier("ab")
+        record: dict[str, Any] = {
+            "identifier": identifier,
+            "start": start,
+            "stop": stop,
+            "kind": kind,
+            "at": self.now(),
+        }
+        if note is not None:
+            record["note"] = note
+        self.store.append_absence(record)
+        return Acknowledgement(recorded="absence", identifier=identifier)

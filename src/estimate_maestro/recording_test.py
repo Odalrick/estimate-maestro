@@ -365,3 +365,18 @@ def test_repairing_an_interval_appends_rather_than_rewrites(recorder, plan):
 
     assert records[-1]["event"] == "repair"
     assert records[0]["at"] == FROZEN.isoformat()
+
+
+def test_an_absence_is_recorded_at_the_store_root(recorder, plan):
+    from estimate_maestro.models import AbsenceKind
+
+    start(recorder, plan, ["Enum"])
+
+    recorder.record_absence(
+        FROZEN, FROZEN + timedelta(hours=1), AbsenceKind.APPOINTMENT, note="dentist"
+    )
+
+    absences = recorder.store.read_absences()
+
+    assert absences[0]["kind"] == "appointment"
+    assert absences[0]["note"] == "dentist"

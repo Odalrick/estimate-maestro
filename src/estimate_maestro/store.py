@@ -51,9 +51,7 @@ class Store:
     def read_meta(self, effort: str) -> dict[str, Any]:
         return json.loads((self.effort_directory(effort) / META_FILE).read_text(encoding="utf-8"))
 
-    def update_meta(
-        self, effort: str, mutate: Callable[[dict[str, Any]], None]
-    ) -> dict[str, Any]:
+    def update_meta(self, effort: str, mutate: Callable[[dict[str, Any]], None]) -> dict[str, Any]:
         path = self.effort_directory(effort) / META_FILE
         with path.open("r+", encoding="utf-8") as handle:
             fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
