@@ -6,8 +6,9 @@ from typing import Any
 from pydantic import BaseModel
 
 from estimate_maestro.config import Config
+from estimate_maestro.errors import UnknownEffort
 from estimate_maestro.models import CommitEvent, Estimate, EstimatePass, Provenance
-from estimate_maestro.projection import measured_intervals, slice_count
+from estimate_maestro.projection import clocked_slices, measured_intervals, slice_count
 from estimate_maestro.store import COMMITS_LOG, ESTIMATES_LOG, INTERVALS_LOG, SLICES_LOG, Store
 from estimate_maestro.timesheet import MeasuredInterval, derive_intervals, wall_seconds
 
@@ -59,8 +60,9 @@ def _slice_count_at(records: list[dict[str, Any]], which: EstimatePass) -> int:
 
 
 def _intervals_for(store: Store, config: Config, effort: str) -> list[MeasuredInterval]:
-    measured = measured_intervals(store.read(effort, INTERVALS_LOG))
-    clocked = {interval.work_slice for interval in measured}
+    interval_records = store.read(effort, INTERVALS_LOG)
+    measured = measured_intervals(interval_records)
+    clocked = clocked_slices(interval_records)
     by_slice: dict[str | None, list[dict[str, Any]]] = defaultdict(list)
     for record in store.read(effort, COMMITS_LOG):
         if record.get("event") == CommitEvent.HARVESTED:
@@ -115,6 +117,8 @@ def effort_table(store: Store, config: Config) -> list[EffortRow]:
 
 
 def effort_detail(store: Store, config: Config, effort: str) -> EffortDetail:
+    if effort not in store.list_efforts():
+        raise UnknownEffort(effort)
     return EffortDetail(
         meta=store.read_meta(effort),
         estimates=store.read(effort, ESTIMATES_LOG),

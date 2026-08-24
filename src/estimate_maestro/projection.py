@@ -20,6 +20,14 @@ def slice_count(slice_records: list[dict[str, Any]]) -> int:
     return len(live_slices(slice_records))
 
 
+def clocked_slices(interval_records: list[dict[str, Any]]) -> set[str | None]:
+    return {
+        record.get("slice")
+        for record in interval_records
+        if record.get("event") == IntervalEvent.CLOCK_IN
+    }
+
+
 def open_interval(interval_records: list[dict[str, Any]]) -> dict[str, Any] | None:
     opened: dict[str, dict[str, Any]] = {}
     for record in interval_records:

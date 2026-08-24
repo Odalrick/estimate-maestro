@@ -10,6 +10,10 @@ class UnknownSlice(EstimateMaestroError):
     pass
 
 
+class UnknownEffort(EstimateMaestroError):
+    pass
+
+
 class AlreadyClockedIn(EstimateMaestroError):
     pass
 
