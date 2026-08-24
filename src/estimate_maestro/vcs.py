@@ -69,7 +69,7 @@ def commits_between(path: Path, since: datetime, until: datetime) -> list[Commit
         f"--until={until.isoformat()}",
         "--reverse",
         "--numstat",
-        f"--pretty=format:{RECORD_SEPARATOR}%H{FIELD_SEPARATOR}%aI{FIELD_SEPARATOR}%s",
+        f"--pretty=format:{RECORD_SEPARATOR}%H{FIELD_SEPARATOR}%aI{FIELD_SEPARATOR}%s{FIELD_SEPARATOR}",
     )
     if not output:
         return []
@@ -78,12 +78,20 @@ def commits_between(path: Path, since: datetime, until: datetime) -> list[Commit
         if not block.strip():
             continue
         lines = block.strip("\n").split("\n")
+        header = lines[0]
+        if not header.endswith(FIELD_SEPARATOR):
+            # A record or field separator byte embedded in the subject split
+            # this commit's header across two blocks. The trailing separator
+            # only survives on a header git actually finished emitting, so a
+            # header missing it is a truncated fragment, not a real commit:
+            # skip it rather than fabricate a record with a wrong subject and
+            # a zeroed diffstat. Git is still there to re-harvest.
+            continue
         try:
-            identifier, authored, subject = lines[0].split(FIELD_SEPARATOR, 2)
+            identifier, authored, subject = header[: -len(FIELD_SEPARATOR)].split(
+                FIELD_SEPARATOR, 2
+            )
         except ValueError:
-            # A subject containing the record or field separator byte corrupts
-            # this one block's parse. Skip only this commit rather than losing
-            # every commit in the window: git is still there to re-harvest.
             continue
         # A merge commit legitimately has no numstat rows under --numstat, so
         # files_changed == insertions == deletions == 0 for one is git's own

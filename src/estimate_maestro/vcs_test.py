@@ -110,5 +110,5 @@ def test_a_subject_containing_the_record_separator_costs_only_itself(tmp_path: P
     )
 
     subjects = [record.subject for record in harvested]
-    assert "commit 0" in subjects
-    assert "commit 2" in subjects
+    assert subjects == ["commit 0", "commit 2"]
+    assert len(harvested) == 2
