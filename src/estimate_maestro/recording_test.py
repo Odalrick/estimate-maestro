@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from estimate_maestro.config import load_config
+from estimate_maestro.errors import EffortAlreadyExists
 from estimate_maestro.models import Estimate
 from estimate_maestro.recording import Recorder
 from estimate_maestro.responses import tainted_field_names
@@ -125,3 +126,34 @@ def test_finishing_an_effort_marks_it_done(recorder, plan):
     recorder.finish_effort(effort)
 
     assert recorder.store.read_meta(effort)["status"] == "done"
+
+
+def test_a_failed_start_leaves_no_wreckage_and_permits_a_retry(recorder, tmp_path):
+    missing_plan = tmp_path / "missing.PR.md"
+
+    with pytest.raises(FileNotFoundError):
+        start(recorder, missing_plan, ["Enum"])
+
+    assert recorder.store.list_efforts() == []
+
+    retried_plan = tmp_path / "retry.PR.md"
+    retried_plan.write_text("# retried\n")
+
+    acknowledgement = start(recorder, retried_plan, ["Enum"])
+
+    assert acknowledgement.identifier == "2026-08-24-squidex-environment-tiers"
+    assert recorder.store.list_efforts() == [acknowledgement.identifier]
+
+
+def test_starting_an_effort_twice_raises_effort_already_exists(recorder, plan):
+    first = start(recorder, plan, ["Enum"]).identifier
+
+    with pytest.raises(EffortAlreadyExists):
+        start(recorder, plan, ["Enum", "Extra"])
+
+    slices = recorder.store.read(first, SLICES_LOG)
+    assert [record["title"] for record in slices] == ["Enum"]
+
+    estimates = recorder.store.read(first, ESTIMATES_LOG)
+    assert len(estimates) == 1
+    assert recorder.store.read_meta(first)["status"] == "active"

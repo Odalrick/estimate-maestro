@@ -1,8 +1,10 @@
+import shutil
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
 from estimate_maestro.config import Config
+from estimate_maestro.errors import EffortAlreadyExists
 from estimate_maestro.identifiers import effort_identifier, new_identifier
 from estimate_maestro.models import (
     EffortStatus,
@@ -72,42 +74,46 @@ class Recorder:
     ) -> Acknowledgement:
         moment = self.now()
         effort = effort_identifier(moment.date(), title)
-        self.store.create_effort(
-            effort,
-            {
-                "title": title,
-                "kind": kind,
-                "status": EffortStatus.PLANNING,
-                "created_at": moment.isoformat(),
-                "repositories": [],
-                "pull_requests": [],
-            },
-        )
-        for title_of_slice in work_slices:
-            self.store.append(
+        meta = {
+            "title": title,
+            "kind": kind,
+            "status": EffortStatus.PLANNING,
+            "created_at": moment.isoformat(),
+            "repositories": [],
+            "pull_requests": [],
+        }
+        try:
+            self.store.create_effort(effort, meta)
+        except FileExistsError as error:
+            raise EffortAlreadyExists(effort) from error
+        try:
+            for title_of_slice in work_slices:
+                self.store.append(
+                    effort,
+                    SLICES_LOG,
+                    {
+                        "event": SliceEvent.ADDED,
+                        "slice": self.make_identifier("sl"),
+                        "title": title_of_slice,
+                        "phase": SlicePhase.PLANNING,
+                        "at": moment,
+                    },
+                )
+            snapshot = self.store.snapshot(effort, plan_path, label="initial")
+            self._append_estimate(
                 effort,
-                SLICES_LOG,
-                {
-                    "event": SliceEvent.ADDED,
-                    "slice": self.make_identifier("sl"),
-                    "title": title_of_slice,
-                    "phase": SlicePhase.PLANNING,
-                    "at": moment,
-                },
+                EstimatePass.INITIAL,
+                estimate,
+                rationale,
+                summary,
+                snapshot,
+                len(work_slices),
             )
-        snapshot = self.store.snapshot(effort, plan_path, label="initial")
-        self._append_estimate(
-            effort,
-            EstimatePass.INITIAL,
-            estimate,
-            rationale,
-            summary,
-            snapshot,
-            len(work_slices),
-        )
-        meta = self.store.read_meta(effort)
-        meta["status"] = EffortStatus.ACTIVE
-        self.store.write_meta(effort, meta)
+            meta["status"] = EffortStatus.ACTIVE
+            self.store.write_meta(effort, meta)
+        except Exception:
+            shutil.rmtree(self.store.effort_directory(effort))
+            raise
         return Acknowledgement(recorded="effort", identifier=effort)
 
     def record_revision(
