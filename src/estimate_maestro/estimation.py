@@ -10,13 +10,32 @@ from estimate_maestro.store import ESTIMATES_LOG, Store
 def reference_efforts(
     store: Store, limit: int = 10, kind: str | None = None
 ) -> list[ReferenceEffort]:
-    all_efforts = []
-    for effort in store.list_efforts():
-        meta = store.read_meta(effort)
-        created_at = datetime.fromisoformat(meta["created_at"])
-        all_efforts.append((created_at, effort, meta))
+    dated = []
+    undated = []
 
-    all_efforts.sort(reverse=True, key=lambda x: (x[0], x[1]))
+    for effort in store.list_efforts():
+        try:
+            meta = store.read_meta(effort)
+        except Exception:
+            continue
+
+        created_at = None
+        try:
+            created_at = datetime.fromisoformat(meta["created_at"])
+        except KeyError:
+            pass
+        except ValueError:
+            pass
+
+        if created_at is not None:
+            dated.append((created_at, effort, meta))
+        else:
+            undated.append((effort, meta))
+
+    dated.sort(reverse=True, key=lambda x: (x[0], x[1]))
+    undated.sort(key=lambda x: x[0])
+
+    all_efforts = dated + [(None, e, m) for e, m in undated]
 
     references: list[ReferenceEffort] = []
     for _created_at, effort, meta in all_efforts:

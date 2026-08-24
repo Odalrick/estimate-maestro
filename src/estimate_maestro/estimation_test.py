@@ -248,3 +248,58 @@ def test_empty_final_summary_does_not_blank_initial_summary(store: Store):
     revision = next(r for r in results if r.effort == "2026-08-19-revision")
 
     assert revision.summary == "Initial plan with details."
+
+
+def test_an_effort_missing_created_at_is_returned_and_sorted_last(store: Store):
+    store.create_effort(
+        "2026-08-18-undated",
+        {
+            "title": "Undated",
+            "kind": "mega-pull-request",
+            "status": "done",
+        },
+    )
+    store.append(
+        "2026-08-18-undated",
+        ESTIMATES_LOG,
+        {
+            "pass": "initial",
+            "estimate": {"scale": "points", "optimistic": 1, "likely": 5, "pessimistic": 30},
+            "summary": "Effort with missing created_at.",
+            "slice_count": 1,
+            "at": "2026-08-18T09:00:00+00:00",
+        },
+    )
+
+    efforts = [reference.effort for reference in reference_efforts(store)]
+
+    assert "2026-08-18-undated" in efforts
+    assert efforts.index("2026-08-18-undated") > efforts.index("2026-08-20-beta")
+
+
+def test_an_effort_with_unparseable_created_at_is_returned_and_sorted_last(store: Store):
+    store.create_effort(
+        "2026-08-17-broken-date",
+        {
+            "title": "Broken Date",
+            "kind": "mega-pull-request",
+            "status": "done",
+            "created_at": "not-a-date",
+        },
+    )
+    store.append(
+        "2026-08-17-broken-date",
+        ESTIMATES_LOG,
+        {
+            "pass": "initial",
+            "estimate": {"scale": "points", "optimistic": 1, "likely": 9, "pessimistic": 30},
+            "summary": "Effort with unparseable created_at.",
+            "slice_count": 1,
+            "at": "2026-08-17T09:00:00+00:00",
+        },
+    )
+
+    efforts = [reference.effort for reference in reference_efforts(store)]
+
+    assert "2026-08-17-broken-date" in efforts
+    assert efforts.index("2026-08-17-broken-date") > efforts.index("2026-08-20-beta")
