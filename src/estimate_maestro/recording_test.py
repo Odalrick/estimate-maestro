@@ -266,6 +266,23 @@ def test_clocking_in_twice_is_refused(recorder, plan):
         recorder.clock_in(effort)
 
 
+def test_clocking_in_twice_is_refused_across_efforts(recorder, plan):
+    first_effort = start(recorder, plan, ["Enum"]).identifier
+    second_effort = recorder.start_effort(
+        title="Nimbus Onboarding Flow",
+        kind="mega-pull-request",
+        plan_path=plan,
+        summary="Nimbus onboarding gains a guided flow.",
+        estimate=Estimate(optimistic=3, likely=5, pessimistic=9),
+        rationale="Sized similarly to the tiers effort.",
+        work_slices=["Enum"],
+    ).identifier
+    recorder.clock_in(first_effort)
+
+    with pytest.raises(AlreadyClockedIn):
+        recorder.clock_in(second_effort)
+
+
 def test_clocking_in_against_an_unknown_slice_is_refused(recorder, plan):
     from estimate_maestro.errors import UnknownSlice
 
