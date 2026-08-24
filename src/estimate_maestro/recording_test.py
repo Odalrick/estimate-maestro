@@ -157,3 +157,52 @@ def test_starting_an_effort_twice_raises_effort_already_exists(recorder, plan):
     estimates = recorder.store.read(first, ESTIMATES_LOG)
     assert len(estimates) == 1
     assert recorder.store.read_meta(first)["status"] == "active"
+
+
+def test_a_slice_added_after_the_effort_is_active_is_marked_in_flight(recorder, plan):
+    effort = start(recorder, plan, ["Enum"]).identifier
+
+    acknowledgement = recorder.add_slice(effort, "Asset progression")
+
+    inserted = recorder.store.read(effort, SLICES_LOG)[-1]
+
+    assert acknowledgement.recorded == "slice"
+    assert inserted["phase"] == "in_flight"
+    assert inserted["title"] == "Asset progression"
+
+
+def test_closing_a_slice_records_the_pull_request(recorder, plan):
+    effort = start(recorder, plan, ["Enum"]).identifier
+    work_slice = recorder.store.read(effort, SLICES_LOG)[0]["slice"]
+
+    recorder.close_slice(effort, work_slice, pull_request="add-comply#1104")
+
+    closed = recorder.store.read(effort, SLICES_LOG)[-1]
+
+    assert closed["event"] == "closed"
+    assert closed["pull_request"] == "add-comply#1104"
+    assert recorder.store.read_meta(effort)["pull_requests"] == ["add-comply#1104"]
+
+
+def test_dropping_a_slice_removes_it_from_the_count(recorder, plan):
+    from estimate_maestro.projection import slice_count as count
+
+    effort = start(recorder, plan, ["Enum", "Client"]).identifier
+    work_slice = recorder.store.read(effort, SLICES_LOG)[1]["slice"]
+
+    recorder.drop_slice(effort, work_slice, reason="Already implemented.")
+
+    assert count(recorder.store.read(effort, SLICES_LOG)) == 1
+
+
+def test_renaming_a_slice_appends_rather_than_rewrites(recorder, plan):
+    effort = start(recorder, plan, ["Enum"]).identifier
+    work_slice = recorder.store.read(effort, SLICES_LOG)[0]["slice"]
+
+    recorder.rename_slice(effort, work_slice, "Tier enum expansion")
+
+    records = recorder.store.read(effort, SLICES_LOG)
+
+    assert len(records) == 2
+    assert records[-1]["event"] == "renamed"
+    assert records[0]["title"] == "Enum"

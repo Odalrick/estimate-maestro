@@ -150,3 +150,41 @@ class Recorder:
         meta["status"] = EffortStatus.DONE
         self.store.write_meta(effort, meta)
         return Acknowledgement(recorded="effort", identifier=effort)
+
+    def _append_slice_event(self, effort: str, record: dict) -> Acknowledgement:
+        record["at"] = self.now()
+        self.store.append(effort, SLICES_LOG, record)
+        return Acknowledgement(recorded="slice", identifier=record["slice"])
+
+    def add_slice(self, effort: str, title: str) -> Acknowledgement:
+        status = self.store.read_meta(effort)["status"]
+        phase = SlicePhase.IN_FLIGHT if status == EffortStatus.ACTIVE else SlicePhase.PLANNING
+        return self._append_slice_event(
+            effort,
+            {
+                "event": SliceEvent.ADDED,
+                "slice": self.make_identifier("sl"),
+                "title": title,
+                "phase": phase,
+            },
+        )
+
+    def close_slice(self, effort: str, work_slice: str, pull_request: str) -> Acknowledgement:
+        meta = self.store.read_meta(effort)
+        if pull_request not in meta["pull_requests"]:
+            meta["pull_requests"].append(pull_request)
+            self.store.write_meta(effort, meta)
+        return self._append_slice_event(
+            effort,
+            {"event": SliceEvent.CLOSED, "slice": work_slice, "pull_request": pull_request},
+        )
+
+    def drop_slice(self, effort: str, work_slice: str, reason: str) -> Acknowledgement:
+        return self._append_slice_event(
+            effort, {"event": SliceEvent.DROPPED, "slice": work_slice, "reason": reason}
+        )
+
+    def rename_slice(self, effort: str, work_slice: str, title: str) -> Acknowledgement:
+        return self._append_slice_event(
+            effort, {"event": SliceEvent.RENAMED, "slice": work_slice, "title": title}
+        )
