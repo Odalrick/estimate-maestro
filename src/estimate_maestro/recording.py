@@ -4,19 +4,30 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from estimate_maestro.clock import clamp_stop
 from estimate_maestro.config import Config
-from estimate_maestro.errors import EffortAlreadyExists, UnknownSlice
+from estimate_maestro.errors import (
+    AlreadyClockedIn,
+    EffortAlreadyExists,
+    NotClockedIn,
+    UnknownSlice,
+)
 from estimate_maestro.identifiers import effort_identifier, new_identifier
 from estimate_maestro.models import (
     EffortStatus,
     Estimate,
     EstimatePass,
+    IntervalEvent,
+    IntervalKind,
+    MeetingParticipants,
+    Provenance,
     SliceEvent,
     SlicePhase,
 )
 from estimate_maestro.projection import live_slices, slice_count
 from estimate_maestro.responses import Acknowledgement
-from estimate_maestro.store import ESTIMATES_LOG, SLICES_LOG, Store
+from estimate_maestro.status import find_open_interval
+from estimate_maestro.store import ESTIMATES_LOG, INTERVALS_LOG, SLICES_LOG, Store
 
 
 def _now() -> datetime:
@@ -201,3 +212,102 @@ class Recorder:
         return self._append_slice_event(
             effort, {"event": SliceEvent.RENAMED, "slice": work_slice, "title": title}
         )
+
+    def clock_in(
+        self,
+        effort: str,
+        work_slice: str | None = None,
+        kind: IntervalKind = IntervalKind.WORK,
+        meeting: MeetingParticipants | None = None,
+        note: str | None = None,
+    ) -> Acknowledgement:
+        if find_open_interval(self.store) is not None:
+            raise AlreadyClockedIn("an interval is already open; clock out first")
+        if work_slice is not None:
+            slice_records = self.store.read(effort, SLICES_LOG)
+            if work_slice not in live_slices(slice_records):
+                raise UnknownSlice(work_slice)
+        interval = self.make_identifier("iv")
+        record: dict[str, Any] = {
+            "event": IntervalEvent.CLOCK_IN,
+            "interval": interval,
+            "slice": work_slice,
+            "kind": kind,
+            "at": self.now(),
+        }
+        if meeting is not None:
+            record["meeting"] = meeting.model_dump(mode="json")
+        if note is not None:
+            record["note"] = note
+        self.store.append(effort, INTERVALS_LOG, record)
+        return Acknowledgement(recorded="interval", identifier=interval)
+
+    def _close(self, stop: datetime, provenance: Provenance, note: str | None) -> Acknowledgement:
+        found = find_open_interval(self.store)
+        if found is None:
+            raise NotClockedIn("no interval is open")
+        effort, opened = found
+        record: dict[str, Any] = {
+            "event": IntervalEvent.CLOCK_OUT,
+            "interval": opened["interval"],
+            "provenance": provenance,
+            "at": stop,
+        }
+        if note is not None:
+            record["note"] = note
+        self.store.append(effort, INTERVALS_LOG, record)
+        return Acknowledgement(recorded="interval", identifier=opened["interval"])
+
+    def clock_out(self, at: datetime | None = None, note: str | None = None) -> Acknowledgement:
+        return self._close(at or self.now(), Provenance.MANUAL, note)
+
+    def clock_out_clamped(
+        self, last_activity: datetime, note: str | None = None
+    ) -> Acknowledgement:
+        found = find_open_interval(self.store)
+        if found is None:
+            raise NotClockedIn("no interval is open")
+        _, opened = found
+        started = datetime.fromisoformat(opened["at"])
+        return self._close(
+            clamp_stop(started, last_activity, self.config), Provenance.CLAMPED, note
+        )
+
+    def annotate_interval(
+        self,
+        effort: str,
+        interval: str,
+        meeting: MeetingParticipants | None = None,
+        note: str | None = None,
+    ) -> Acknowledgement:
+        record: dict[str, Any] = {
+            "event": IntervalEvent.ANNOTATE,
+            "interval": interval,
+            "at": self.now(),
+        }
+        if meeting is not None:
+            record["meeting"] = meeting.model_dump(mode="json")
+        if note is not None:
+            record["note"] = note
+        self.store.append(effort, INTERVALS_LOG, record)
+        return Acknowledgement(recorded="interval", identifier=interval)
+
+    def repair_interval(
+        self,
+        effort: str,
+        interval: str,
+        start: datetime | None = None,
+        stop: datetime | None = None,
+    ) -> Acknowledgement:
+        record: dict[str, Any] = {
+            "event": IntervalEvent.REPAIR,
+            "interval": interval,
+            "provenance": Provenance.REPAIRED,
+            "at": self.now(),
+        }
+        if start is not None:
+            record["start"] = start
+        if stop is not None:
+            record["stop"] = stop
+        self.store.append(effort, INTERVALS_LOG, record)
+        return Acknowledgement(recorded="interval", identifier=interval)

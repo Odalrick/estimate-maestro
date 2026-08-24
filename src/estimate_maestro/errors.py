@@ -8,3 +8,11 @@ class EffortAlreadyExists(EstimateMaestroError):
 
 class UnknownSlice(EstimateMaestroError):
     pass
+
+
+class AlreadyClockedIn(EstimateMaestroError):
+    pass
+
+
+class NotClockedIn(EstimateMaestroError):
+    pass

@@ -1,14 +1,14 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 
 from estimate_maestro.config import load_config
-from estimate_maestro.errors import EffortAlreadyExists
-from estimate_maestro.models import Estimate
+from estimate_maestro.errors import AlreadyClockedIn, EffortAlreadyExists, NotClockedIn
+from estimate_maestro.models import Estimate, MeetingParticipants
 from estimate_maestro.recording import Recorder
 from estimate_maestro.responses import tainted_field_names
-from estimate_maestro.store import ESTIMATES_LOG, SLICES_LOG, Store
+from estimate_maestro.store import ESTIMATES_LOG, INTERVALS_LOG, SLICES_LOG, Store
 
 FROZEN = datetime(2026, 8, 24, 9, 14, tzinfo=UTC)
 
@@ -243,3 +243,108 @@ def test_renaming_an_unknown_slice_raises_unknown_slice(recorder, plan):
 
     with pytest.raises(UnknownSlice):
         recorder.rename_slice(effort, "sl-9999", "New title")
+
+
+def test_clocking_in_records_an_open_interval(recorder, plan):
+    effort = start(recorder, plan, ["Enum"]).identifier
+
+    acknowledgement = recorder.clock_in(effort)
+
+    record = recorder.store.read(effort, INTERVALS_LOG)[-1]
+
+    assert acknowledgement.recorded == "interval"
+    assert record["event"] == "clock_in"
+    assert record["kind"] == "work"
+    assert "stop" not in record
+
+
+def test_clocking_in_twice_is_refused(recorder, plan):
+    effort = start(recorder, plan, ["Enum"]).identifier
+    recorder.clock_in(effort)
+
+    with pytest.raises(AlreadyClockedIn):
+        recorder.clock_in(effort)
+
+
+def test_clocking_in_against_an_unknown_slice_is_refused(recorder, plan):
+    from estimate_maestro.errors import UnknownSlice
+
+    effort = start(recorder, plan, ["Enum"]).identifier
+
+    with pytest.raises(UnknownSlice):
+        recorder.clock_in(effort, work_slice="sl-9999")
+
+
+def test_clocking_out_without_an_open_interval_is_refused(recorder, plan):
+    start(recorder, plan, ["Enum"])
+
+    with pytest.raises(NotClockedIn):
+        recorder.clock_out()
+
+
+def test_clocking_out_closes_the_open_interval_as_manual(recorder, plan):
+    effort = start(recorder, plan, ["Enum"]).identifier
+    recorder.clock_in(effort)
+
+    recorder.clock_out(at=FROZEN + timedelta(hours=2))
+
+    record = recorder.store.read(effort, INTERVALS_LOG)[-1]
+
+    assert record["event"] == "clock_out"
+    assert record["provenance"] == "manual"
+    assert record["at"] == (FROZEN + timedelta(hours=2)).isoformat()
+
+
+def test_clamped_clock_out_stops_at_the_end_of_the_workday(recorder, plan):
+    effort = start(recorder, plan, ["Enum"]).identifier
+    recorder.clock_in(effort)
+
+    recorder.clock_out_clamped(last_activity=FROZEN + timedelta(days=3))
+
+    record = recorder.store.read(effort, INTERVALS_LOG)[-1]
+
+    assert record["provenance"] == "clamped"
+    assert record["at"].startswith("2026-08-24T17:00:00")
+
+
+def test_a_meeting_records_its_participants(recorder, plan):
+    effort = start(recorder, plan, ["Enum"]).identifier
+
+    recorder.clock_in(
+        effort,
+        kind="meeting",
+        meeting=MeetingParticipants(internal=2, external=1, names=["me", "manager", "sales"]),
+    )
+
+    record = recorder.store.read(effort, INTERVALS_LOG)[-1]
+
+    assert record["kind"] == "meeting"
+    assert record["meeting"]["internal"] == 2
+    assert record["meeting"]["external"] == 1
+
+
+def test_participants_can_be_attached_after_the_fact(recorder, plan):
+    effort = start(recorder, plan, ["Enum"]).identifier
+    interval = recorder.clock_in(effort).identifier
+
+    recorder.annotate_interval(
+        effort, interval, meeting=MeetingParticipants(internal=3, external=0)
+    )
+
+    record = recorder.store.read(effort, INTERVALS_LOG)[-1]
+
+    assert record["event"] == "annotate"
+    assert record["meeting"]["internal"] == 3
+
+
+def test_repairing_an_interval_appends_rather_than_rewrites(recorder, plan):
+    effort = start(recorder, plan, ["Enum"]).identifier
+    interval = recorder.clock_in(effort).identifier
+    recorder.clock_out(at=FROZEN + timedelta(hours=2))
+
+    recorder.repair_interval(effort, interval, start=FROZEN + timedelta(minutes=90))
+
+    records = recorder.store.read(effort, INTERVALS_LOG)
+
+    assert records[-1]["event"] == "repair"
+    assert records[0]["at"] == FROZEN.isoformat()

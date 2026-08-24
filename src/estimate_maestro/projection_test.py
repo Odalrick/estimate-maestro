@@ -1,4 +1,4 @@
-from estimate_maestro.projection import slice_count
+from estimate_maestro.projection import open_interval, slice_count
 
 
 def test_added_slices_are_counted():
@@ -31,3 +31,30 @@ def test_closing_a_slice_leaves_it_counted():
 
 def test_an_empty_log_counts_zero():
     assert slice_count([]) == 0
+
+
+def test_an_interval_without_a_clock_out_is_open():
+    records = [{"event": "clock_in", "interval": "iv-01", "at": "2026-08-24T09:00:00+02:00"}]
+
+    found = open_interval(records)
+
+    assert found is not None
+    assert found["interval"] == "iv-01"
+
+
+def test_a_closed_interval_is_not_open():
+    records = [
+        {"event": "clock_in", "interval": "iv-01", "at": "2026-08-24T09:00:00+02:00"},
+        {"event": "clock_out", "interval": "iv-01", "at": "2026-08-24T11:00:00+02:00"},
+    ]
+
+    assert open_interval(records) is None
+
+
+def test_an_annotation_does_not_close_an_interval():
+    records = [
+        {"event": "clock_in", "interval": "iv-01", "at": "2026-08-24T09:00:00+02:00"},
+        {"event": "annotate", "interval": "iv-01", "note": "pairing"},
+    ]
+
+    assert open_interval(records) is not None

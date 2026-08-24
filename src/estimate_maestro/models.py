@@ -35,6 +35,7 @@ class IntervalEvent(StrEnum):
     CLOCK_IN = "clock_in"
     CLOCK_OUT = "clock_out"
     ANNOTATE = "annotate"
+    REPAIR = "repair"
 
 
 class Provenance(StrEnum):
