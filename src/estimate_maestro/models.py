@@ -58,6 +58,11 @@ class SliceEvent(StrEnum):
     RENAMED = "renamed"
 
 
+class SlicePhase(StrEnum):
+    PLANNING = "planning"
+    IN_FLIGHT = "in_flight"
+
+
 class Vcs(StrEnum):
     GIT = "git"
     FOSSIL = "fossil"
