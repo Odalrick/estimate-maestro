@@ -5,9 +5,6 @@ from pathlib import Path
 
 from estimate_maestro.models import Vcs
 
-RECORD_SEPARATOR = "\x1e"
-FIELD_SEPARATOR = "\x1f"
-
 
 @dataclass(frozen=True)
 class RepositoryReference:
@@ -61,50 +58,55 @@ def _parse_numstat(lines: list[str]) -> tuple[int, int, int]:
     return files_changed, insertions, deletions
 
 
+def _commit_detail(path: Path, identifier: str) -> CommitRecord | None:
+    # Positional, not separator-based: %aI and %s are each guaranteed to be
+    # exactly one line (a subject is by definition a message's first line,
+    # so it cannot itself contain a newline), so there is no data-derived
+    # byte for a malicious or merely unlucky commit to forge a boundary
+    # with. A hash is passed in from the unforgeable list below, never
+    # parsed out of message text.
+    output = _git(path, "show", "--numstat", "--format=%aI%n%s", identifier)
+    if output is None:
+        return None
+    lines = output.split("\n")
+    if len(lines) < 2:
+        return None
+    authored, subject = lines[0], lines[1]
+    # A merge commit legitimately has no numstat rows under --numstat, so
+    # files_changed == insertions == deletions == 0 for one is git's own
+    # semantics, not a parser bug.
+    files_changed, insertions, deletions = _parse_numstat(
+        [line for line in lines[2:] if line.strip()]
+    )
+    return CommitRecord(
+        identifier=identifier,
+        subject=subject,
+        authored_at=datetime.fromisoformat(authored),
+        files_changed=files_changed,
+        insertions=insertions,
+        deletions=deletions,
+    )
+
+
 def commits_between(path: Path, since: datetime, until: datetime) -> list[CommitRecord]:
+    path = Path(path).expanduser()
     output = _git(
-        Path(path).expanduser(),
+        path,
         "log",
         f"--since={since.isoformat()}",
         f"--until={until.isoformat()}",
         "--reverse",
-        "--numstat",
-        f"--pretty=format:{RECORD_SEPARATOR}%H{FIELD_SEPARATOR}%aI{FIELD_SEPARATOR}%s{FIELD_SEPARATOR}",
+        "--pretty=format:%H",
     )
     if not output:
         return []
+    # A commit hash is 40 hex characters: it cannot contain a newline or
+    # any other separator, so this list is unforgeable no matter what a
+    # commit's subject contains.
+    identifiers = [line for line in output.split("\n") if line.strip()]
     harvested: list[CommitRecord] = []
-    for block in output.split(RECORD_SEPARATOR):
-        if not block.strip():
-            continue
-        lines = block.strip("\n").split("\n")
-        header = lines[0]
-        if not header.endswith(FIELD_SEPARATOR):
-            # A record or field separator byte embedded in the subject split
-            # this commit's header across two blocks. The trailing separator
-            # only survives on a header git actually finished emitting, so a
-            # header missing it is a truncated fragment, not a real commit:
-            # skip it rather than fabricate a record with a wrong subject and
-            # a zeroed diffstat. Git is still there to re-harvest.
-            continue
-        try:
-            identifier, authored, subject = header[: -len(FIELD_SEPARATOR)].split(
-                FIELD_SEPARATOR, 2
-            )
-        except ValueError:
-            continue
-        # A merge commit legitimately has no numstat rows under --numstat, so
-        # files_changed == insertions == deletions == 0 for one is git's own
-        # semantics, not a parser bug.
-        files_changed, insertions, deletions = _parse_numstat(lines[1:])
-        harvested.append(
-            CommitRecord(
-                identifier=identifier,
-                subject=subject,
-                authored_at=datetime.fromisoformat(authored),
-                files_changed=files_changed,
-                insertions=insertions,
-                deletions=deletions,
-            )
-        )
+    for identifier in identifiers:
+        detail = _commit_detail(path, identifier)
+        if detail is not None:
+            harvested.append(detail)
     return harvested

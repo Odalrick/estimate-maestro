@@ -94,7 +94,10 @@ def test_a_subject_containing_the_field_separator_survives_intact(tmp_path: Path
     assert [record.subject for record in harvested] == ["before\x1fafter"]
 
 
-def test_a_subject_containing_the_record_separator_costs_only_itself(tmp_path: Path):
+def test_a_subject_containing_the_record_separator_survives_intact(tmp_path: Path):
+    # Under the hash-list-then-per-commit-detail scheme, a record separator
+    # in a subject no longer costs the commit anything: there is nothing
+    # left in the parse for it to corrupt.
     path = tmp_path / "repo"
     path.mkdir()
     git(path, "init", "-b", "main")
@@ -110,5 +113,31 @@ def test_a_subject_containing_the_record_separator_costs_only_itself(tmp_path: P
     )
 
     subjects = [record.subject for record in harvested]
-    assert subjects == ["commit 0", "commit 2"]
-    assert len(harvested) == 2
+    assert subjects == ["commit 0", "before\x1eafter", "commit 2"]
+    assert len(harvested) == 3
+
+
+def test_a_subject_containing_both_separators_together_is_harvested_intact(tmp_path: Path):
+    path = tmp_path / "repo"
+    path.mkdir()
+    git(path, "init", "-b", "main")
+    git(path, "config", "user.email", "test@example.com")
+    git(path, "config", "user.name", "Test")
+    for index, subject in enumerate(["commit 0", "before\x1f\x1eafter", "commit 2"]):
+        (path / f"file{index}.txt").write_text(f"line {index}\n")
+        git(path, "add", ".")
+        git(path, "commit", "-m", subject, moment=BASE + timedelta(hours=index))
+
+    harvested = commits_between(
+        path, since=BASE - timedelta(minutes=1), until=BASE + timedelta(hours=5)
+    )
+
+    assert len(harvested) == 3
+    assert [record.subject for record in harvested] == [
+        "commit 0",
+        "before\x1f\x1eafter",
+        "commit 2",
+    ]
+    assert harvested[1].files_changed == 1
+    assert harvested[1].insertions == 1
+    assert harvested[1].deletions == 0
