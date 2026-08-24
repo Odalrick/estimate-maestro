@@ -89,3 +89,92 @@ def test_a_still_open_interval_is_not_measured():
     ]
 
     assert measured_intervals(records) == []
+
+
+def test_overlapping_absences_deduct_the_shared_region_only_once():
+    absences = [
+        {"start": at(10).isoformat(), "stop": at(11).isoformat(), "kind": "appointment"},
+        {"start": at(10, 30).isoformat(), "stop": at(11, 30).isoformat(), "kind": "vacation"},
+    ]
+
+    assert wall_seconds([interval(at(9), at(12))], absences) == pytest.approx(1.5 * 3600)
+
+
+def test_absences_exceeding_one_intervals_duration_do_not_leak_into_anothers_total():
+    over_absent = interval(at(9), at(10))
+    untouched = interval(at(14), at(15))
+    absences = [
+        {"start": at(9).isoformat(), "stop": at(10).isoformat(), "kind": "appointment"},
+        {"start": at(9, 30).isoformat(), "stop": at(10, 30).isoformat(), "kind": "vacation"},
+    ]
+
+    assert wall_seconds([over_absent, untouched], absences) == pytest.approx(3600)
+
+
+def test_two_repairs_merge_cumulatively():
+    records = [
+        {
+            "event": "clock_in",
+            "interval": "iv-01",
+            "slice": None,
+            "kind": "work",
+            "at": at(9).isoformat(),
+        },
+        {
+            "event": "clock_out",
+            "interval": "iv-01",
+            "provenance": "manual",
+            "at": at(12).isoformat(),
+        },
+        {
+            "event": "repair",
+            "interval": "iv-01",
+            "provenance": "repaired",
+            "start": at(10, 30).isoformat(),
+            "at": at(18).isoformat(),
+        },
+        {
+            "event": "repair",
+            "interval": "iv-01",
+            "provenance": "repaired",
+            "stop": at(11, 30).isoformat(),
+            "at": at(19).isoformat(),
+        },
+    ]
+
+    measured = measured_intervals(records)
+
+    assert len(measured) == 1
+    assert measured[0].start == at(10, 30)
+    assert measured[0].stop == at(11, 30)
+
+
+def test_a_repair_supplying_only_stop_falls_back_to_the_recorded_start():
+    records = [
+        {
+            "event": "clock_in",
+            "interval": "iv-01",
+            "slice": None,
+            "kind": "work",
+            "at": at(9).isoformat(),
+        },
+        {
+            "event": "clock_out",
+            "interval": "iv-01",
+            "provenance": "manual",
+            "at": at(12).isoformat(),
+        },
+        {
+            "event": "repair",
+            "interval": "iv-01",
+            "provenance": "repaired",
+            "stop": at(11, 30).isoformat(),
+            "at": at(18).isoformat(),
+        },
+    ]
+
+    measured = measured_intervals(records)
+
+    assert len(measured) == 1
+    assert measured[0].start == at(9)
+    assert measured[0].stop == at(11, 30)

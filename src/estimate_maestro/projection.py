@@ -47,7 +47,7 @@ def measured_intervals(interval_records: list[dict[str, Any]]) -> list[MeasuredI
         elif event == IntervalEvent.CLOCK_OUT:
             stopped[interval] = record
         elif event == IntervalEvent.REPAIR:
-            repairs[interval] = record
+            repairs[interval] = {**repairs.get(interval, {}), **record}
 
     measured: list[MeasuredInterval] = []
     for interval in order:
