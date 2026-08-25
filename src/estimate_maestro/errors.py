@@ -32,3 +32,11 @@ class MalformedArgument(EstimateMaestroError):
 
 class InvalidConfiguration(EstimateMaestroError):
     pass
+
+
+class UnfinishedInterval(EstimateMaestroError):
+    pass
+
+
+class StopBeforeStart(EstimateMaestroError):
+    pass

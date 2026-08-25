@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -138,12 +138,33 @@ def test_clock_out_records_manual_provenance_by_default(store, environment, caps
 def test_clock_out_with_at_uses_the_given_timestamp(store, environment, capsys):
     run(["clock-in", "2026-08-24-thing"], environment)
     capsys.readouterr()
+    opened = store.read("2026-08-24-thing", INTERVALS_LOG)[0]
+    # Derived from the clock-in rather than hard-coded: a stop earlier than the
+    # clock-in is refused, and the clock-in happens at the real clock.
+    stop = datetime.fromisoformat(opened["at"]) + timedelta(hours=1)
 
-    run(["clock-out", "--at", "2026-08-24T15:30:00+00:00"], environment)
+    run(["clock-out", "--at", stop.isoformat()], environment)
 
     closed = store.read("2026-08-24-thing", INTERVALS_LOG)[-1]
-    assert closed["at"] == "2026-08-24T15:30:00+00:00"
+    assert closed["at"] == stop.isoformat()
     assert closed["provenance"] == "manual"
+
+
+def test_clock_out_with_an_at_before_the_clock_in_is_refused(store, environment, capsys):
+    run(["clock-in", "2026-08-24-thing"], environment)
+    capsys.readouterr()
+    opened = store.read("2026-08-24-thing", INTERVALS_LOG)[0]
+    stop = datetime.fromisoformat(opened["at"]) - timedelta(days=1)
+
+    code = run(["clock-out", "--at", stop.isoformat()], environment)
+
+    captured = capsys.readouterr()
+    assert code == 1
+    assert stop.isoformat() in captured.err
+    assert [record["event"] for record in store.read("2026-08-24-thing", INTERVALS_LOG)] == [
+        "clock_in"
+    ]
+    assert_no_forbidden_words(captured.err)
 
 
 def test_clock_out_at_last_activity_clamps_and_records_provenance(store, environment):

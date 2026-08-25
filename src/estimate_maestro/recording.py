@@ -10,6 +10,8 @@ from estimate_maestro.errors import (
     AlreadyClockedIn,
     EffortAlreadyExists,
     NotClockedIn,
+    StopBeforeStart,
+    UnfinishedInterval,
     UnknownSlice,
 )
 from estimate_maestro.identifiers import effort_identifier, new_identifier
@@ -27,7 +29,12 @@ from estimate_maestro.models import (
     SlicePhase,
     Vcs,
 )
-from estimate_maestro.projection import live_slices, slice_count
+from estimate_maestro.projection import (
+    closed_intervals,
+    live_slices,
+    open_interval,
+    slice_count,
+)
 from estimate_maestro.responses import Acknowledgement
 from estimate_maestro.status import find_open_interval
 from estimate_maestro.store import COMMITS_LOG, ESTIMATES_LOG, INTERVALS_LOG, SLICES_LOG, Store
@@ -162,6 +169,18 @@ class Recorder:
         return Acknowledgement(recorded="estimate", identifier=identifier)
 
     def finish_effort(self, effort: str) -> Acknowledgement:
+        # The last moment an open interval can still be closed accurately. Left
+        # open, it is dropped from the measurement entirely and the finished
+        # effort reports a confident zero that nothing afterwards distinguishes
+        # from an effort that genuinely took no time.
+        opened = open_interval(self.store.read(effort, INTERVALS_LOG))
+        if opened is not None:
+            raise UnfinishedInterval(
+                f"interval {opened['interval']} on {effort} is still open, started at "
+                f"{opened['at']}; close it with clock_out(at=...) before finishing, or the "
+                "effort records no time at all"
+            )
+
         def mark_done(meta: dict[str, Any]) -> None:
             meta["status"] = EffortStatus.DONE
 
@@ -251,6 +270,16 @@ class Recorder:
         if found is None:
             raise NotClockedIn("no interval is open")
         effort, opened = found
+        started = datetime.fromisoformat(opened["at"])
+        # "Forgot, remembered later" with the wrong date on it. Accepted, the
+        # interval measures zero rather than negative, and reads afterwards as a
+        # session that happened and took no time.
+        if stop < started:
+            raise StopBeforeStart(
+                f"the stop given for interval {opened['interval']} is earlier than its "
+                f"clock-in: {stop.isoformat()} is before {started.isoformat()}; check the "
+                "date on --at"
+            )
         record: dict[str, Any] = {
             "event": IntervalEvent.CLOCK_OUT,
             "interval": opened["interval"],
@@ -303,6 +332,16 @@ class Recorder:
         start: datetime | None = None,
         stop: datetime | None = None,
     ) -> Acknowledgement:
+        # A repair only ever adjusts the bounds of a measurement that exists.
+        # Applied to an interval with no clock-out, the repair record is read by
+        # nothing — `measured_intervals` skips the interval outright — so the
+        # correction is silently discarded and the timer keeps running.
+        if interval not in closed_intervals(self.store.read(effort, INTERVALS_LOG)):
+            raise UnfinishedInterval(
+                f"interval {interval} on {effort} has no clock_out, so repairing its bounds "
+                "would change nothing; close it first — clock_out(at=...), or "
+                "`estimate-maestro-cli clock-out --at <ISO 8601>`"
+            )
         record: dict[str, Any] = {
             "event": IntervalEvent.REPAIR,
             "interval": interval,

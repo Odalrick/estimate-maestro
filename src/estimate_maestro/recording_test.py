@@ -8,6 +8,8 @@ from estimate_maestro.errors import (
     AlreadyClockedIn,
     EffortAlreadyExists,
     NotClockedIn,
+    StopBeforeStart,
+    UnfinishedInterval,
     UnknownEffort,
 )
 from estimate_maestro.models import Estimate, MeetingParticipants
@@ -522,3 +524,94 @@ def test_a_refused_write_leaves_the_real_effort_clockable(recorder, plan):
     acknowledgement = recorder.clock_in(effort)
 
     assert acknowledgement.identifier == recorder.store.read(effort, INTERVALS_LOG)[0]["interval"]
+
+
+def test_finishing_an_effort_with_an_interval_still_open_is_refused(recorder, plan):
+    effort = start(recorder, plan, ["Enum"]).identifier
+    interval = recorder.clock_in(effort).identifier
+
+    with pytest.raises(UnfinishedInterval) as raised:
+        recorder.finish_effort(effort)
+
+    assert interval in str(raised.value)
+    assert FROZEN.isoformat() in str(raised.value)
+    assert recorder.store.read_meta(effort)["status"] == "active"
+
+
+def test_finishing_an_effort_is_permitted_once_the_interval_is_closed(recorder, plan):
+    effort = start(recorder, plan, ["Enum"]).identifier
+    recorder.clock_in(effort)
+    recorder.clock_out(at=FROZEN + timedelta(hours=2))
+
+    recorder.finish_effort(effort)
+
+    assert recorder.store.read_meta(effort)["status"] == "done"
+
+
+def test_an_interval_open_on_another_effort_does_not_block_finishing_this_one(recorder, plan):
+    effort = start(recorder, plan, ["Enum"]).identifier
+    other = recorder.start_effort(
+        title="Nimbus Onboarding Flow",
+        kind="mega-pull-request",
+        plan_path=plan,
+        summary="Nimbus onboarding gains a guided flow.",
+        estimate=Estimate(optimistic=3, likely=5, pessimistic=9),
+        rationale="Sized similarly to the tiers effort.",
+        work_slices=["Enum"],
+    ).identifier
+    recorder.clock_in(other)
+
+    recorder.finish_effort(effort)
+
+    assert recorder.store.read_meta(effort)["status"] == "done"
+    assert recorder.store.read_meta(other)["status"] == "active"
+
+
+def test_repairing_an_interval_that_was_never_closed_is_refused(recorder, plan):
+    effort = start(recorder, plan, ["Enum"]).identifier
+    interval = recorder.clock_in(effort).identifier
+
+    with pytest.raises(UnfinishedInterval) as raised:
+        recorder.repair_interval(effort, interval, stop=FROZEN + timedelta(hours=2))
+
+    assert interval in str(raised.value)
+    assert "clock_out" in str(raised.value)
+    assert [record["event"] for record in recorder.store.read(effort, INTERVALS_LOG)] == [
+        "clock_in"
+    ]
+
+
+def test_repairing_an_interval_that_does_not_exist_is_refused(recorder, plan):
+    effort = start(recorder, plan, ["Enum"]).identifier
+    recorder.clock_in(effort)
+    recorder.clock_out(at=FROZEN + timedelta(hours=2))
+
+    with pytest.raises(UnfinishedInterval):
+        recorder.repair_interval(effort, "iv-9999", start=FROZEN)
+
+    assert [record["event"] for record in recorder.store.read(effort, INTERVALS_LOG)] == [
+        "clock_in",
+        "clock_out",
+    ]
+
+
+def test_clocking_out_before_the_clock_in_is_refused(recorder, plan):
+    effort = start(recorder, plan, ["Enum"]).identifier
+    interval = recorder.clock_in(effort).identifier
+
+    with pytest.raises(StopBeforeStart) as raised:
+        recorder.clock_out(at=FROZEN - timedelta(days=1))
+
+    assert interval in str(raised.value)
+    assert [record["event"] for record in recorder.store.read(effort, INTERVALS_LOG)] == [
+        "clock_in"
+    ]
+
+
+def test_clocking_out_at_the_clock_in_moment_is_permitted(recorder, plan):
+    effort = start(recorder, plan, ["Enum"]).identifier
+    recorder.clock_in(effort)
+
+    recorder.clock_out(at=FROZEN)
+
+    assert recorder.store.read(effort, INTERVALS_LOG)[-1]["at"] == FROZEN.isoformat()

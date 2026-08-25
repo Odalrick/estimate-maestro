@@ -28,6 +28,14 @@ def clocked_slices(interval_records: list[dict[str, Any]]) -> set[str | None]:
     }
 
 
+def closed_intervals(interval_records: list[dict[str, Any]]) -> set[str]:
+    return {
+        record["interval"]
+        for record in interval_records
+        if record.get("event") == IntervalEvent.CLOCK_OUT
+    }
+
+
 def open_interval(interval_records: list[dict[str, Any]]) -> dict[str, Any] | None:
     opened: dict[str, dict[str, Any]] = {}
     for record in interval_records:
