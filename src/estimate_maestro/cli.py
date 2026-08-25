@@ -7,7 +7,12 @@ from datetime import datetime
 
 from estimate_maestro.calibration import effort_table, summary
 from estimate_maestro.config import load_config
-from estimate_maestro.errors import EstimateMaestroError, NotClockedIn
+from estimate_maestro.errors import (
+    EstimateMaestroError,
+    InvalidConfiguration,
+    MalformedArgument,
+    NotClockedIn,
+)
 from estimate_maestro.models import AbsenceKind
 from estimate_maestro.recording import Recorder
 from estimate_maestro.status import current
@@ -59,17 +64,21 @@ def _parse_timestamp(argument: str, value: str) -> datetime:
     try:
         return datetime.fromisoformat(value)
     except ValueError as error:
-        raise ValueError(f"{argument} is not a valid ISO 8601 timestamp: {value!r}") from error
+        raise MalformedArgument(argument, value) from error
 
 
 def run(arguments: list[str], environment: Mapping[str, str]) -> int:
     parsed = _parser().parse_args(arguments)
-    config = load_config(environment)
-    store = Store(config.store_path)
-    store.initialise()
-    recorder = Recorder(store=store, config=config)
 
     try:
+        try:
+            config = load_config(environment)
+        except ValueError as error:
+            raise InvalidConfiguration(str(error)) from error
+        store = Store(config.store_path)
+        store.initialise()
+        recorder = Recorder(store=store, config=config)
+
         if parsed.command == "clock-in":
             acknowledgement = recorder.clock_in(
                 parsed.effort, work_slice=parsed.work_slice, note=parsed.note
@@ -111,7 +120,7 @@ def run(arguments: list[str], environment: Mapping[str, str]) -> int:
     except NotClockedIn as error:
         print(str(error), file=sys.stderr)
         return EXIT_NOTHING_CLOCKED_IN
-    except (EstimateMaestroError, ValueError) as error:
+    except EstimateMaestroError as error:
         print(str(error), file=sys.stderr)
         return EXIT_ERROR
     return EXIT_OK

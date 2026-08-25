@@ -257,3 +257,36 @@ def test_summary_reports_the_refusal_note_below_the_minimum(store, environment, 
     assert '"efforts_counted": 1' in output
     assert '"mean_hours_per_point": null' in output
     assert "calibration is not established" in output
+
+
+def test_a_corrupted_stored_interval_raises_instead_of_being_swallowed(store, environment):
+    # A malformed CLI argument (MalformedArgument) and a corrupted stored
+    # timestamp read back by library internals must not look the same. The
+    # former is an ordinary typo and exits 1 with a clean message; the latter
+    # is a genuine bug and must propagate as an uncaught ValueError, not be
+    # reported as if it were user error.
+    store.append(
+        "2026-08-24-thing",
+        INTERVALS_LOG,
+        {
+            "event": "clock_in",
+            "interval": "iv-corrupt",
+            "slice": None,
+            "kind": "work",
+            "at": "CORRUPTED-NOT-A-DATE",
+        },
+    )
+
+    with pytest.raises(ValueError, match="CORRUPTED-NOT-A-DATE"):
+        run(["clock-out", "--at-last-activity", "2026-09-30T12:00:00+00:00"], environment)
+
+
+def test_a_malformed_config_variable_exits_one_with_a_clean_message(store, environment, capsys):
+    broken_environment = {**environment, "ESTIMATE_MAESTRO_DAY_START": "not-a-time"}
+
+    code = run(["current"], broken_environment)
+
+    error = capsys.readouterr().err
+    assert code == 1
+    assert error == "ESTIMATE_MAESTRO_DAY_START is not an ISO 8601 time: 'not-a-time'\n"
+    assert "Traceback" not in error

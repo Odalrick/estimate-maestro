@@ -23,3 +23,12 @@ class AlreadyClockedIn(EstimateMaestroError):
 
 class NotClockedIn(EstimateMaestroError):
     pass
+
+
+class MalformedArgument(EstimateMaestroError):
+    def __init__(self, argument: str, value: str):
+        super().__init__(f"{argument} is not a valid ISO 8601 timestamp: {value!r}")
+
+
+class InvalidConfiguration(EstimateMaestroError):
+    pass
