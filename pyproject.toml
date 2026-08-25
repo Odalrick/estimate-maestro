@@ -12,7 +12,8 @@ dependencies = [
 ]
 
 [project.scripts]
-estimate-maestro = "estimate_maestro.__main__:main"
+estimate-maestro = "estimate_maestro.server:main"
+estimate-maestro-cli = "estimate_maestro.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.11.6,<0.12.0"]
