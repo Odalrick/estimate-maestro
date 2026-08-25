@@ -12,12 +12,14 @@ from estimate_maestro.errors import (
     NotClockedIn,
     StopBeforeStart,
     UnfinishedInterval,
+    UnknownEffortKind,
     UnknownSlice,
 )
 from estimate_maestro.identifiers import effort_identifier, new_identifier
 from estimate_maestro.models import (
     AbsenceKind,
     CommitEvent,
+    EffortKind,
     EffortStatus,
     Estimate,
     EstimatePass,
@@ -95,11 +97,18 @@ class Recorder:
         rationale: str,
         work_slices: list[str],
     ) -> Acknowledgement:
+        # `kind` is what `reference_efforts(kind=...)` filters on later, and the
+        # store is the only surviving copy of it. Free text there means a typo
+        # here becomes an effort nothing will ever match.
+        try:
+            effort_kind = EffortKind(kind)
+        except ValueError as error:
+            raise UnknownEffortKind(kind, [member.value for member in EffortKind]) from error
         moment = self.now()
         effort = effort_identifier(moment.date(), title)
         meta = {
             "title": title,
-            "kind": kind,
+            "kind": effort_kind,
             "status": EffortStatus.PLANNING,
             "created_at": moment.isoformat(),
             "repositories": [],

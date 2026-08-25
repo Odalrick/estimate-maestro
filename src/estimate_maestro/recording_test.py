@@ -11,6 +11,7 @@ from estimate_maestro.errors import (
     StopBeforeStart,
     UnfinishedInterval,
     UnknownEffort,
+    UnknownEffortKind,
 )
 from estimate_maestro.models import Estimate, MeetingParticipants
 from estimate_maestro.recording import Recorder
@@ -615,3 +616,26 @@ def test_clocking_out_at_the_clock_in_moment_is_permitted(recorder, plan):
     recorder.clock_out(at=FROZEN)
 
     assert recorder.store.read(effort, INTERVALS_LOG)[-1]["at"] == FROZEN.isoformat()
+
+
+def test_starting_an_effort_with_an_unrecognised_kind_is_refused(recorder, plan):
+    with pytest.raises(UnknownEffortKind) as raised:
+        recorder.start_effort(
+            title="Lantern Environment Tiers",
+            kind="mega-pull-reqeust",
+            plan_path=plan,
+            summary="Lantern environments gain a tier progression.",
+            estimate=Estimate(optimistic=3, likely=5, pessimistic=9),
+            rationale="About the size of the domain-display effort.",
+            work_slices=["Enum"],
+        )
+
+    assert "mega-pull-reqeust" in str(raised.value)
+    assert "mega-pull-request, standalone-pull-request, other" in str(raised.value)
+    assert recorder.store.list_efforts() == []
+
+
+def test_the_stored_kind_is_the_canonical_value(recorder, plan):
+    effort = start(recorder, plan, ["Enum"]).identifier
+
+    assert recorder.store.read_meta(effort)["kind"] == "mega-pull-request"

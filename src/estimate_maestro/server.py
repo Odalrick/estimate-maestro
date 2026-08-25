@@ -15,7 +15,13 @@ from estimate_maestro.calibration import (
 )
 from estimate_maestro.config import Config, load_config
 from estimate_maestro.estimation import reference_efforts
-from estimate_maestro.models import AbsenceKind, Estimate, IntervalKind, MeetingParticipants
+from estimate_maestro.models import (
+    AbsenceKind,
+    EffortKind,
+    Estimate,
+    IntervalKind,
+    MeetingParticipants,
+)
 from estimate_maestro.recording import Recorder
 from estimate_maestro.responses import (
     Acknowledgement,
@@ -71,7 +77,7 @@ def build_server(store: Store, config: Config) -> MCPServer:
     @server.tool()
     def start_effort(
         title: str,
-        kind: str,
+        kind: EffortKind,
         plan_path: str,
         summary_text: str,
         optimistic: float,
@@ -239,7 +245,9 @@ def build_server(store: Store, config: Config) -> MCPServer:
     # is set explicitly instead.
 
     @server.tool(name="reference_efforts")
-    def reference_efforts_tool(limit: int = 10, kind: str | None = None) -> list[ReferenceEffort]:
+    def reference_efforts_tool(
+        limit: int = 10, kind: EffortKind | None = None
+    ) -> list[ReferenceEffort]:
         """Prior efforts with their summaries and estimates, for comparison. No actuals."""
         return reference_efforts(store, limit, kind)
 

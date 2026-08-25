@@ -17,6 +17,11 @@ class UnknownEffort(EstimateMaestroError):
         super().__init__(f"unknown effort: {effort}")
 
 
+class UnknownEffortKind(EstimateMaestroError):
+    def __init__(self, kind: str, known: list[str]):
+        super().__init__(f"unknown effort kind: {kind}; expected one of {', '.join(known)}")
+
+
 class AlreadyClockedIn(EstimateMaestroError):
     pass
 
