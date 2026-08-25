@@ -19,8 +19,10 @@ to compare apples to apples.
 2. Show the user the prior efforts whose summaries most resemble the work at
    hand, with their titles, summaries, and point triples. Where a prior
    effort also has a final-pass triple, show that alongside its initial one —
-   the final triple reflects the plan as it actually turned out and can be
-   the closer comparison.
+   but present it as what it is: a re-estimate made in hindsight about scope,
+   not a report of how long the work took. It can be the closer comparison
+   precisely because it reflects the plan as it actually turned out, not
+   because it is a record of actual time spent.
 3. Ask which ones it resembles and whether this is bigger or smaller.
 4. Ask for the three numbers, and for a one-line rationale.
 5. Ask for a one-or-two-paragraph summary of what this work is. It is the

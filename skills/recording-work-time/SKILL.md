@@ -26,7 +26,8 @@ list — scope growth, not initial setup.
 - Starting effort-level work with no slice — a design conversation, a
   retrospective: `clock_in(effort)`.
 - A meeting that is part of the work: `clock_in(effort, kind="meeting",
-  internal=<people we pay for, including the user>, external=<people we do not>)`.
+  internal=<people we pay for, including the user>, external=<people we do not>,
+  participants=<names, if known now>)`.
 
 `clock_in` refuses when an interval is already open. That refusal is correct;
 clock out first rather than working around it.
@@ -35,6 +36,12 @@ clock out first rather than working around it.
 that effort — closed, dropped, or simply mistyped — raising `UnknownSlice`. A
 stale slice identifier is a plausible mistake mid-effort; treat the refusal as
 a prompt to check the identifier, not as something to route around.
+
+If the names were not to hand when clocking into the meeting, `participants`
+can be left out and attached later — or corrected — with
+`annotate_interval(effort, interval, internal=, external=, participants=,
+note=)`. It works on any interval, not only meetings, and is also the way to
+attach a note after the fact.
 
 ## When to clock out
 
@@ -49,6 +56,11 @@ script what happened: `0` means it clocked out successfully, `1` means a real
 error, and `3` means nothing was clocked in — expected and frequent, not a
 failure. Anyone wiring the hook should treat `3` the same as `0`, not as an
 error to surface.
+
+Clocking out does not harvest commits. `harvest_commits(effort, work_slice,
+path, since, until)` is a separate, explicit call that copies commit metadata
+from a working tree into the store — call it yourself when it is due; nothing
+triggers it automatically.
 
 ## When to record a deviation
 
@@ -68,6 +80,7 @@ between those times; a repair says one specific interval was recorded wrongly.
   ask the user for a revised estimate and call `record_revision`. A slice
   inserted mid-flight is the cheapest moment to make drift visible.
 - A slice turns out to be unnecessary: `drop_slice(effort, work_slice, reason)`.
+- A slice's title needs correcting: `rename_slice(effort, work_slice, title)`.
 - A slice's pull request merges: `close_slice(effort, work_slice, pull_request)`,
   then `record_landed_commit` with the squash commit on the default branch.
 - History was rewritten by a rebase, amend, or fixup: `remap_commits(effort,
