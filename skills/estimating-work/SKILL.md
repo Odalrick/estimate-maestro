@@ -43,5 +43,9 @@ any kind.
 ## Prior efforts, in full
 
 `reference_efforts` returns summaries. The full archived plan artefacts live in
-the store under each effort's `snapshots/`; read them when a summary is not
-enough to judge resemblance.
+the store under each effort's `snapshots/` directory. Read the files inside
+`snapshots/` when a summary is not enough to judge resemblance — and **read
+nothing else in the store**. `intervals.jsonl` sits in the directory above,
+holding every clock-in and clock-out, so an actual is one subtraction away from
+anyone who opens it, and this is the one session in which that number must not
+be seen.

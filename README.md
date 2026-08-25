@@ -182,6 +182,17 @@ ln -s ~/mcp/estimate-maestro/skills/recording-work-time ~/.claude/skills/recordi
 ln -s ~/mcp/estimate-maestro/skills/estimating-work ~/.claude/skills/estimating-work
 ```
 
+Make the store a git repository. Its files are plain text and append-only so
+that it can be committed and roam between machines, and it is the only
+surviving copy of what it records: a number lost or wrong in there cannot be
+reconstructed from anywhere else. Keep it **private** — it holds project names,
+branch names and how long things took, none of which belong in a public repo.
+
+```sh
+mkdir -p ~/mcp/estimate-maestro-store
+git -C ~/mcp/estimate-maestro-store init
+```
+
 Point the server and CLI at your store — add this to whatever environment
 Claude Code and your shell both see (for example your shell profile, and the
 environment passed to the MCP registration above):

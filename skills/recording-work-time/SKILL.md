@@ -33,9 +33,11 @@ list — scope growth, not initial setup.
 clock out first rather than working around it.
 
 `clock_in` also refuses when `work_slice` is given but is not a live slice on
-that effort — closed, dropped, or simply mistyped — raising `UnknownSlice`. A
-stale slice identifier is a plausible mistake mid-effort; treat the refusal as
-a prompt to check the identifier, not as something to route around.
+that effort — dropped, or simply mistyped — raising `UnknownSlice`. A stale
+slice identifier is a plausible mistake mid-effort; treat the refusal as a
+prompt to check the identifier, not as something to route around. A *closed*
+slice is still clockable, deliberately: a merged pull request can still need
+post-merge fixes, and that time belongs to the slice it came from.
 
 If the names were not to hand when clocking into the meeting, `participants`
 can be left out and attached later — or corrected — with
@@ -46,7 +48,9 @@ attach a note after the fact.
 ## When to clock out
 
 - Finishing for the session, or switching slices: `clock_out()`.
-- Forgot, and remembered later: `clock_out(at="<ISO 8601>")`.
+- Forgot, and remembered later: `clock_out(at="<ISO 8601>")`. A timestamp
+  earlier than the clock-in is refused rather than recorded as a session of
+  zero length — check the date when that happens.
 
 A timer left running is closed by the `SessionEnd` hook, clamped to the
 configured quit time. That is a normal outcome, not a failure — the model
@@ -62,6 +66,13 @@ path, since, until)` is a separate, explicit call that copies commit metadata
 from a working tree into the store — call it yourself when it is due; nothing
 triggers it automatically.
 
+`since` is the clock-in moment, and `current()` is the only thing that reports
+it — after `clock_out` it is gone from there. So the order is: call `current()`
+and **keep the `since` it gives you**, then `clock_out()`, then
+`harvest_commits(..., since=<the kept moment>, until=<now>)`. A guessed window
+loses commits at one end or appends unrelated ones at the other, and neither is
+visible afterwards.
+
 ## When to record a deviation
 
 - Time genuinely not worked — vacation, an appointment, an unrelated meeting,
@@ -69,7 +80,10 @@ triggers it automatically.
   kind)`, where `kind` is one of `vacation`, `appointment`,
   `unrelated_meeting`, or `other`. Retroactive is expected and fine.
 - An interval whose bounds were simply wrong: `repair_interval(effort,
-  interval, start, stop)`.
+  interval, start, stop)`. It works on a *closed* interval only — repairing one
+  that is still running is refused, because the repair would be recorded and
+  then read by nothing. Close it with `clock_out(at=...)` first, and repair
+  afterwards if the bounds still need moving.
 
 Absence and repair are different: an absence says nobody was working anywhere
 between those times; a repair says one specific interval was recorded wrongly.
@@ -90,6 +104,10 @@ between those times; a repair says one specific interval was recorded wrongly.
 
 `record_final_plan(effort, plan_path, summary_text, optimistic, likely,
 pessimistic, rationale)`, then `finish_effort(effort)`.
+
+`finish_effort` refuses while an interval is still open on that effort, naming
+it. That is the last moment the forgotten timer can still be closed at the right
+time; finished around it, the effort would record no time at all.
 
 **Never show the user a wall-time total during any of the above.** The
 recording tools do not return one. Do not compute one yourself, and do not call
