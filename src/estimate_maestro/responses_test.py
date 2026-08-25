@@ -4,6 +4,7 @@ from typing import Any
 import pytest
 from pydantic import BaseModel
 
+from estimate_maestro.calibration import EffortDetail, EffortRow, Summary
 from estimate_maestro.responses import (
     Acknowledgement,
     CurrentStatus,
@@ -77,3 +78,48 @@ def test_the_four_categories_exist():
         "status",
         "calibration",
     }
+
+
+def test_the_guard_catches_every_field_of_the_effort_row():
+    assert tainted_field_names(EffortRow) == [
+        "wall_hours",
+        "calendar_days",
+        "slice_count_initial",
+        "slice_count_final",
+        "derived_share",
+    ]
+
+
+def test_the_guard_catches_every_figure_on_the_summary():
+    assert tainted_field_names(Summary) == [
+        "efforts_counted",
+        "mean_hours_per_point",
+        "median_hours_per_point",
+        "mean_inventory_growth",
+        "median_inventory_growth",
+    ]
+
+
+def test_the_guard_catches_the_raw_logs_on_the_effort_detail():
+    assert tainted_field_names(EffortDetail) == [
+        "meta",
+        "estimates",
+        "slices",
+        "intervals",
+        "commits",
+        "row.wall_hours",
+        "row.calendar_days",
+        "row.slice_count_initial",
+        "row.slice_count_final",
+        "row.derived_share",
+    ]
+
+
+def test_the_guard_flags_a_mapping_it_cannot_see_inside():
+    class Tempting(BaseModel):
+        payload: dict[str, Any]
+        bare: dict
+        many: list[dict[str, float]]
+        innocent: str
+
+    assert tainted_field_names(Tempting) == ["payload", "bare", "many"]
