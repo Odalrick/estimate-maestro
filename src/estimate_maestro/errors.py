@@ -3,15 +3,18 @@ class EstimateMaestroError(Exception):
 
 
 class EffortAlreadyExists(EstimateMaestroError):
-    pass
+    def __init__(self, effort: str):
+        super().__init__(f"an effort already exists with this identifier: {effort}")
 
 
 class UnknownSlice(EstimateMaestroError):
-    pass
+    def __init__(self, work_slice: str):
+        super().__init__(f"unknown slice: {work_slice}")
 
 
 class UnknownEffort(EstimateMaestroError):
-    pass
+    def __init__(self, effort: str):
+        super().__init__(f"unknown effort: {effort}")
 
 
 class AlreadyClockedIn(EstimateMaestroError):

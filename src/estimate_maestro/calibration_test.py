@@ -292,4 +292,5 @@ def test_effort_detail_raises_a_named_error_for_an_unknown_effort(tmp_path: Path
     with pytest.raises(UnknownEffort) as raised:
         effort_detail(store, config, "2026-01-01-does-not-exist")
 
-    assert str(raised.value) == "2026-01-01-does-not-exist"
+    assert "unknown effort" in str(raised.value)
+    assert "2026-01-01-does-not-exist" in str(raised.value)
