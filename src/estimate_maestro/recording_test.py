@@ -43,10 +43,10 @@ def plan(tmp_path: Path) -> Path:
 
 def start(recorder: Recorder, plan: Path, work_slices: list[str]):
     return recorder.start_effort(
-        title="Squidex Environment Tiers",
+        title="Lantern Environment Tiers",
         kind="mega-pull-request",
         plan_path=plan,
-        summary="Squidex environments gain a tier progression.",
+        summary="Lantern environments gain a tier progression.",
         estimate=Estimate(optimistic=3, likely=5, pessimistic=9),
         rationale="About the size of the domain-display effort.",
         work_slices=work_slices,
@@ -57,7 +57,7 @@ def test_starting_an_effort_returns_an_acknowledgement_and_nothing_else(recorder
     acknowledgement = start(recorder, plan, ["Enum", "Server reads", "Client"])
 
     assert acknowledgement.recorded == "effort"
-    assert acknowledgement.identifier == "2026-08-24-squidex-environment-tiers"
+    assert acknowledgement.identifier == "2026-08-24-lantern-environment-tiers"
     assert tainted_field_names(type(acknowledgement)) == []
 
 
@@ -78,7 +78,7 @@ def test_the_initial_estimate_captures_the_slice_count_automatically(recorder, p
     assert initial["pass"] == "initial"
     assert initial["slice_count"] == 3
     assert initial["estimate"]["likely"] == 5
-    assert initial["summary"].startswith("Squidex environments")
+    assert initial["summary"].startswith("Lantern environments")
 
 
 def test_the_plan_artefact_is_snapshotted(recorder, plan):
@@ -149,7 +149,7 @@ def test_a_failed_start_leaves_no_wreckage_and_permits_a_retry(recorder, tmp_pat
 
     acknowledgement = start(recorder, retried_plan, ["Enum"])
 
-    assert acknowledgement.identifier == "2026-08-24-squidex-environment-tiers"
+    assert acknowledgement.identifier == "2026-08-24-lantern-environment-tiers"
     assert recorder.store.list_efforts() == [acknowledgement.identifier]
 
 
@@ -183,13 +183,13 @@ def test_closing_a_slice_records_the_pull_request(recorder, plan):
     effort = start(recorder, plan, ["Enum"]).identifier
     work_slice = recorder.store.read(effort, SLICES_LOG)[0]["slice"]
 
-    recorder.close_slice(effort, work_slice, pull_request="add-comply#1104")
+    recorder.close_slice(effort, work_slice, pull_request="lantern#1104")
 
     closed = recorder.store.read(effort, SLICES_LOG)[-1]
 
     assert closed["event"] == "closed"
-    assert closed["pull_request"] == "add-comply#1104"
-    assert recorder.store.read_meta(effort)["pull_requests"] == ["add-comply#1104"]
+    assert closed["pull_request"] == "lantern#1104"
+    assert recorder.store.read_meta(effort)["pull_requests"] == ["lantern#1104"]
 
 
 def test_dropping_a_slice_removes_it_from_the_count(recorder, plan):
@@ -220,10 +220,10 @@ def test_closing_a_slice_twice_with_the_same_pull_request_deduplicates(recorder,
     effort = start(recorder, plan, ["Enum"]).identifier
     work_slice = recorder.store.read(effort, SLICES_LOG)[0]["slice"]
 
-    recorder.close_slice(effort, work_slice, pull_request="add-comply#1104")
-    recorder.close_slice(effort, work_slice, pull_request="add-comply#1104")
+    recorder.close_slice(effort, work_slice, pull_request="lantern#1104")
+    recorder.close_slice(effort, work_slice, pull_request="lantern#1104")
 
-    assert recorder.store.read_meta(effort)["pull_requests"] == ["add-comply#1104"]
+    assert recorder.store.read_meta(effort)["pull_requests"] == ["lantern#1104"]
 
 
 def test_closing_an_unknown_slice_raises_unknown_slice(recorder, plan):
@@ -232,7 +232,7 @@ def test_closing_an_unknown_slice_raises_unknown_slice(recorder, plan):
     effort = start(recorder, plan, ["Enum"]).identifier
 
     with pytest.raises(UnknownSlice):
-        recorder.close_slice(effort, "sl-9999", pull_request="add-comply#1104")
+        recorder.close_slice(effort, "sl-9999", pull_request="lantern#1104")
 
 
 def test_dropping_an_unknown_slice_raises_unknown_slice(recorder, plan):

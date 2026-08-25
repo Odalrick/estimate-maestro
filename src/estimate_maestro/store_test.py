@@ -83,7 +83,9 @@ def test_read_lines_raises_with_line_number_for_malformed_record(store: Store):
     with pytest.raises(MalformedRecord) as exc_info:
         store.read("2026-08-24-thing", ESTIMATES_LOG)
 
-    assert "2" in str(exc_info.value)
+    # Path and line together: the effort identifier already contains a "2", so a
+    # bare substring check passes on any line number at all.
+    assert str(exc_info.value) == f"malformed JSON at {log_path}:2"
 
 
 def test_encode_raises_type_error_for_unsupported_type():

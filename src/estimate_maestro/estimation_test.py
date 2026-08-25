@@ -52,7 +52,7 @@ def store(tmp_path: Path) -> Store:
         "2026-08-01-alpha",
         "Alpha",
         15,
-        "Squidex environment progression.",
+        "Lantern environment progression.",
         "2026-08-01T09:00:00+00:00",
     )
     add(

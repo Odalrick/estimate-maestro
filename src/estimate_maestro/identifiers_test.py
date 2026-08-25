@@ -4,7 +4,7 @@ from estimate_maestro.identifiers import effort_identifier, new_identifier, slug
 
 
 def test_slugify_lowercases_and_hyphenates():
-    assert slugify("Squidex Environment Tiers") == "squidex-environment-tiers"
+    assert slugify("Lantern Environment Tiers") == "lantern-environment-tiers"
 
 
 def test_slugify_strips_punctuation_and_collapses_separators():
@@ -12,9 +12,9 @@ def test_slugify_strips_punctuation_and_collapses_separators():
 
 
 def test_effort_identifier_prefixes_the_creation_date():
-    identifier = effort_identifier(date(2026, 8, 24), "Squidex Environment Tiers")
+    identifier = effort_identifier(date(2026, 8, 24), "Lantern Environment Tiers")
 
-    assert identifier == "2026-08-24-squidex-environment-tiers"
+    assert identifier == "2026-08-24-lantern-environment-tiers"
 
 
 def test_new_identifier_uses_the_supplied_source():

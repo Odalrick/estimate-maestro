@@ -29,6 +29,26 @@ def test_closing_a_slice_leaves_it_counted():
     assert slice_count(records) == 1
 
 
+def test_renaming_a_slice_leaves_it_counted_once():
+    records = [
+        {"event": "added", "slice": "sl-01"},
+        {"event": "renamed", "slice": "sl-01", "title": "Tier enum expansion"},
+    ]
+
+    assert slice_count(records) == 1
+
+
+def test_a_rename_of_a_dropped_slice_does_not_resurrect_it():
+    records = [
+        {"event": "added", "slice": "sl-01"},
+        {"event": "added", "slice": "sl-02"},
+        {"event": "dropped", "slice": "sl-02"},
+        {"event": "renamed", "slice": "sl-02", "title": "Back from the dead"},
+    ]
+
+    assert slice_count(records) == 1
+
+
 def test_an_empty_log_counts_zero():
     assert slice_count([]) == 0
 
