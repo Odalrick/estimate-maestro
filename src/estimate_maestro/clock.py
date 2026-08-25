@@ -30,9 +30,13 @@ def working_seconds_between(start: datetime, stop: datetime, hours: WorkingHours
 
 def clamp_stop(start: datetime, last_activity: datetime, config: Config) -> datetime:
     hours = config.working_hours
+    # Strict at the upper bound: `day_end` is where the working day stops, not a
+    # moment inside it. Inclusive, a session begun at exactly 17:00 clamps to
+    # 17:00 and records nothing at all, while one begun at 17:01 gets the
+    # off-hours cap.
     within_model = (
         start.weekday() in hours.workdays
-        and hours.day_start <= start.timetz().replace(tzinfo=None) <= hours.day_end
+        and hours.day_start <= start.timetz().replace(tzinfo=None) < hours.day_end
     )
     if within_model:
         limit = _combine(start.date(), hours.day_end, start)

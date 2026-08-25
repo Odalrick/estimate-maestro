@@ -64,6 +64,23 @@ def test_a_start_outside_the_model_clamps_to_the_off_hours_cap():
     )
 
 
+def test_a_start_at_exactly_the_end_of_the_day_takes_the_off_hours_cap():
+    config = load_config({})
+
+    # 17:00 is the boundary, not a working moment: treated as inside the model it
+    # clamps to 17:00 and records a session of exactly nothing, while 17:01 gets
+    # the four-hour cap.
+    assert clamp_stop(at(24, 17), last_activity=at(25, 9), config=config) == at(24, 17) + timedelta(
+        hours=4
+    )
+
+
+def test_a_start_at_exactly_the_start_of_the_day_is_inside_the_model():
+    config = load_config({})
+
+    assert clamp_stop(at(24, 9), last_activity=at(25, 9), config=config) == at(24, 17)
+
+
 def test_overlap_is_zero_when_two_spans_do_not_touch():
     assert overlap_seconds(at(24, 9), at(24, 10), at(24, 11), at(24, 12)) == pytest.approx(0)
 
