@@ -7,15 +7,30 @@ from datetime import datetime
 
 from estimate_maestro.calibration import effort_table, summary
 from estimate_maestro.config import load_config
-from estimate_maestro.errors import EstimateMaestroError
+from estimate_maestro.errors import EstimateMaestroError, NotClockedIn
 from estimate_maestro.models import AbsenceKind
 from estimate_maestro.recording import Recorder
 from estimate_maestro.status import current
 from estimate_maestro.store import Store
 
+EXIT_OK = 0
+EXIT_ERROR = 1
+EXIT_NOTHING_CLOCKED_IN = 3
+
+EXIT_CODES_EPILOG = (
+    "exit codes:\n"
+    f"  {EXIT_OK}  success\n"
+    f"  {EXIT_ERROR}  an error occurred\n"
+    f"  {EXIT_NOTHING_CLOCKED_IN}  clock-out only: nothing was clocked in (not a failure)\n"
+)
+
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="estimate-maestro-cli")
+    parser = argparse.ArgumentParser(
+        prog="estimate-maestro-cli",
+        epilog=EXIT_CODES_EPILOG,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     clock_in = subparsers.add_parser("clock-in")
@@ -40,6 +55,13 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _parse_timestamp(argument: str, value: str) -> datetime:
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError as error:
+        raise ValueError(f"{argument} is not a valid ISO 8601 timestamp: {value!r}") from error
+
+
 def run(arguments: list[str], environment: Mapping[str, str]) -> int:
     parsed = _parser().parse_args(arguments)
     config = load_config(environment)
@@ -56,11 +78,11 @@ def run(arguments: list[str], environment: Mapping[str, str]) -> int:
         elif parsed.command == "clock-out":
             if parsed.last_activity is not None:
                 acknowledgement = recorder.clock_out_clamped(
-                    datetime.fromisoformat(parsed.last_activity)
+                    _parse_timestamp("--at-last-activity", parsed.last_activity)
                 )
             else:
                 acknowledgement = recorder.clock_out(
-                    datetime.fromisoformat(parsed.at) if parsed.at else None
+                    _parse_timestamp("--at", parsed.at) if parsed.at else None
                 )
             print(f"Ok, recorded — interval {acknowledgement.identifier}.")
         elif parsed.command == "current":
@@ -68,11 +90,12 @@ def run(arguments: list[str], environment: Mapping[str, str]) -> int:
             if reported.interval is None:
                 print("Nothing clocked in.")
             else:
-                print(f"{reported.effort} ({reported.work_slice}) open since {reported.since}.")
+                work_slice = reported.work_slice if reported.work_slice is not None else "no slice"
+                print(f"{reported.effort} ({work_slice}) open since {reported.since}.")
         elif parsed.command == "record-absence":
             acknowledgement = recorder.record_absence(
-                datetime.fromisoformat(parsed.start),
-                datetime.fromisoformat(parsed.stop),
+                _parse_timestamp("start", parsed.start),
+                _parse_timestamp("stop", parsed.stop),
                 AbsenceKind(parsed.kind),
                 parsed.note,
             )
@@ -85,10 +108,13 @@ def run(arguments: list[str], environment: Mapping[str, str]) -> int:
             )
         elif parsed.command == "summary":
             print(json.dumps(summary(store, config).model_dump(mode="json"), indent=2))
-    except EstimateMaestroError as error:
+    except NotClockedIn as error:
         print(str(error), file=sys.stderr)
-        return 1
-    return 0
+        return EXIT_NOTHING_CLOCKED_IN
+    except (EstimateMaestroError, ValueError) as error:
+        print(str(error), file=sys.stderr)
+        return EXIT_ERROR
+    return EXIT_OK
 
 
 def main() -> None:

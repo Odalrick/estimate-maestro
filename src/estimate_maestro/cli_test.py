@@ -79,7 +79,7 @@ def test_clock_in_then_current_reports_the_effort(store, environment, capsys):
     since = datetime.fromisoformat(opened["at"])
     output = capsys.readouterr().out
     assert code == 0
-    assert output == f"2026-08-24-thing (None) open since {since}.\n"
+    assert output == f"2026-08-24-thing (no slice) open since {since}.\n"
     assert_no_forbidden_words(output)
 
 
@@ -164,11 +164,47 @@ def test_clock_out_at_last_activity_clamps_and_records_provenance(store, environ
     assert closed["at"] == expected_stop.isoformat()
 
 
-def test_clock_out_without_a_timer_exits_non_zero(store, environment, capsys):
+def test_clock_out_without_a_timer_exits_with_the_dedicated_code(store, environment, capsys):
     code = run(["clock-out"], environment)
 
-    assert code != 0
+    assert code == 3
     assert capsys.readouterr().err == f"{NotClockedIn('no interval is open')}\n"
+
+
+def test_clock_out_with_a_malformed_at_exits_one_naming_the_argument(store, environment, capsys):
+    run(["clock-in", "2026-08-24-thing"], environment)
+    capsys.readouterr()
+
+    code = run(["clock-out", "--at", "not-a-timestamp"], environment)
+
+    error = capsys.readouterr().err
+    assert code == 1
+    assert error == "--at is not a valid ISO 8601 timestamp: 'not-a-timestamp'\n"
+    assert "Traceback" not in error
+
+
+def test_clock_out_with_a_malformed_at_last_activity_exits_one_naming_the_argument(
+    store, environment, capsys
+):
+    run(["clock-in", "2026-08-24-thing"], environment)
+    capsys.readouterr()
+
+    code = run(["clock-out", "--at-last-activity", "2026-13-40"], environment)
+
+    error = capsys.readouterr().err
+    assert code == 1
+    assert error == "--at-last-activity is not a valid ISO 8601 timestamp: '2026-13-40'\n"
+    assert "Traceback" not in error
+
+
+def test_a_genuine_clock_out_error_still_exits_one_not_three(store, environment, capsys):
+    # clock_out_clamped still needs an open interval; with none open it raises
+    # NotClockedIn same as plain clock-out, but a malformed argument is a
+    # different, genuine error and must not be confused with "nothing to do".
+    code = run(["clock-out", "--at", "not-a-timestamp"], environment)
+
+    assert code == 1
+    assert capsys.readouterr().err == "--at is not a valid ISO 8601 timestamp: 'not-a-timestamp'\n"
 
 
 def test_record_absence_prints_an_acknowledgement_and_stores_it(store, environment, capsys):
