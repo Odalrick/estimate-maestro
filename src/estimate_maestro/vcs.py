@@ -44,10 +44,14 @@ def _git(path: Path, *arguments: str) -> str | None:
     # boundary.
     #
     # errors="replace" is the backstop underneath the forced encoding, and
-    # should never fire once git is transcoding. If it somehow does, a
-    # replacement character beats a UnicodeDecodeError escaping the three
-    # exception types this function swallows and aborting a whole clock-out.
-    # Correct first, survivable second.
+    # should never fire once git is transcoding. Strict decoding was considered
+    # here and declined: a UnicodeDecodeError escapes the three exception types
+    # this function swallows and takes the whole harvest with it, and the point
+    # of copying commit metadata at all is that git will not hold it after a
+    # squash-merge — a skipped commit loses its `authored_at` and its diffstat
+    # permanently, with no way to notice afterwards that they were ever there.
+    # A replacement character in one line of prose is a recoverable blemish on a
+    # record that still exists. Correct first, survivable second.
     try:
         completed = subprocess.run(
             ["git", "-c", "i18n.logOutputEncoding=UTF-8", *arguments],
@@ -112,18 +116,30 @@ def _commit_detail(path: Path, identifier: str) -> CommitRecord | None:
     if len(lines) < 2:
         return None
     authored, subject = lines[0], lines[1]
-    # A merge commit may or may not produce numstat rows here, depending on
-    # the git version and the options in play: git 2.55's `git show` prints a
-    # diffstat against the first parent, while other versions and option
-    # combinations print none at all. The parser treats both the same, so an
-    # all-zero diffstat on a merge is git's own semantics, not a parser bug.
+    # The one all-or-nothing failure in an otherwise per-commit best-effort
+    # module. An unparseable stamp used to abort the whole harvest; a naive one
+    # parsed cleanly and then raised much later, when the derivation compared it
+    # against the aware stamps every other record carries. Both cost this commit
+    # and no other.
+    try:
+        authored_at = datetime.fromisoformat(authored)
+    except ValueError:
+        return None
+    if authored_at.utcoffset() is None:
+        return None
+    # A merge commit does produce numstat rows here: `git show` diffs a merge
+    # against its first parent (verified against git 2.55), so a merge is
+    # recorded with the diffstat of what it brought in. Other git versions and
+    # `diff-merges` settings print nothing at all for a merge instead. The
+    # parser treats both the same, so an all-zero diffstat on a merge is git's
+    # own semantics, not a parser bug.
     files_changed, insertions, deletions = _parse_numstat(
         [line for line in lines[2:] if line.strip()]
     )
     return CommitRecord(
         identifier=identifier,
         subject=subject,
-        authored_at=datetime.fromisoformat(authored),
+        authored_at=authored_at,
         files_changed=files_changed,
         insertions=insertions,
         deletions=deletions,

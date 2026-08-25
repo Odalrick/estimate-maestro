@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from estimate_maestro import vcs
 from estimate_maestro.models import Vcs
 from estimate_maestro.vcs import commits_between, detect_repository
 
@@ -253,3 +254,60 @@ def test_a_signed_commit_is_harvested_when_log_show_signature_is_set(tmp_path: P
     assert harvested[0].files_changed == 1
     assert harvested[0].insertions == 1
     assert harvested[0].deletions == 0
+
+
+def _fixed_git(details: dict[str, str]):
+    """A `_git` that serves a canned hash list and canned `git show` output.
+
+    Git will not emit a malformed author date on request, so the failure has to
+    be handed to the parser directly.
+    """
+
+    def fake_git(path: Path, *arguments: str) -> str | None:
+        if arguments[0] == "log":
+            return "\n".join(details) + "\n"
+        return details[arguments[-1]]
+
+    return fake_git
+
+
+def test_a_commit_with_an_unparseable_author_date_costs_only_itself(monkeypatch):
+    broken = "a" * 40
+    intact = "b" * 40
+    monkeypatch.setattr(
+        vcs,
+        "_git",
+        _fixed_git(
+            {
+                broken: "not a date at all\nbroken commit\n1\t0\tfile.txt\n",
+                intact: f"{BASE.isoformat()}\nintact commit\n2\t1\tfile.txt\n",
+            }
+        ),
+    )
+
+    harvested = commits_between(Path("/nowhere"), since=BASE, until=BASE + timedelta(hours=1))
+
+    assert [record.subject for record in harvested] == ["intact commit"]
+    assert harvested[0].authored_at == BASE
+    assert harvested[0].insertions == 2
+
+
+def test_a_commit_with_a_naive_author_date_costs_only_itself(monkeypatch):
+    naive = "a" * 40
+    intact = "b" * 40
+    monkeypatch.setattr(
+        vcs,
+        "_git",
+        _fixed_git(
+            {
+                naive: "2026-08-24T09:00:00\nnaive commit\n1\t0\tfile.txt\n",
+                intact: f"{BASE.isoformat()}\nintact commit\n1\t0\tfile.txt\n",
+            }
+        ),
+    )
+
+    harvested = commits_between(Path("/nowhere"), since=BASE, until=BASE + timedelta(hours=1))
+
+    # A naive stamp cannot be compared against the aware ones every other record
+    # carries: mixed into the derivation it raises and takes the whole table down.
+    assert [record.subject for record in harvested] == ["intact commit"]
