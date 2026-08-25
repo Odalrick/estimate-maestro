@@ -4,7 +4,12 @@ from pathlib import Path
 import pytest
 
 from estimate_maestro.config import load_config
-from estimate_maestro.errors import AlreadyClockedIn, EffortAlreadyExists, NotClockedIn
+from estimate_maestro.errors import (
+    AlreadyClockedIn,
+    EffortAlreadyExists,
+    NotClockedIn,
+    UnknownEffort,
+)
 from estimate_maestro.models import Estimate, MeetingParticipants
 from estimate_maestro.recording import Recorder
 from estimate_maestro.responses import tainted_field_names
@@ -482,3 +487,38 @@ def test_remapping_appends_rather_than_overwriting(recorder, plan):
         "reason": "rebase",
         "at": FROZEN.isoformat(),
     }
+
+
+def test_clocking_in_against_an_effort_that_does_not_exist_is_refused(recorder, plan):
+    effort = start(recorder, plan, ["Enum"]).identifier
+
+    with pytest.raises(UnknownEffort) as raised:
+        recorder.clock_in("2026-08-24-lantren-environment-tiers")
+
+    assert str(raised.value) == "unknown effort: 2026-08-24-lantren-environment-tiers"
+    assert recorder.store.list_efforts() == [effort]
+    assert recorder.store.read(effort, INTERVALS_LOG) == []
+
+
+def test_recording_a_revision_against_an_effort_that_does_not_exist_is_refused(recorder, plan):
+    effort = start(recorder, plan, ["Enum"]).identifier
+
+    with pytest.raises(UnknownEffort):
+        recorder.record_revision(
+            "2026-08-24-lantren-environment-tiers",
+            Estimate(optimistic=6, likely=9, pessimistic=15),
+            "Asset progression appeared.",
+        )
+
+    assert recorder.store.list_efforts() == [effort]
+
+
+def test_a_refused_write_leaves_the_real_effort_clockable(recorder, plan):
+    effort = start(recorder, plan, ["Enum"]).identifier
+
+    with pytest.raises(UnknownEffort):
+        recorder.clock_in("2026-08-24-lantren-environment-tiers")
+
+    acknowledgement = recorder.clock_in(effort)
+
+    assert acknowledgement.identifier == recorder.store.read(effort, INTERVALS_LOG)[0]["interval"]

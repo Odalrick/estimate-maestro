@@ -8,7 +8,7 @@ from estimate_maestro.config import Config, load_config
 from estimate_maestro.errors import UnknownEffort
 from estimate_maestro.models import CommitEvent, Estimate
 from estimate_maestro.recording import Recorder
-from estimate_maestro.store import COMMITS_LOG, SLICES_LOG, Store
+from estimate_maestro.store import COMMITS_LOG, INTERVALS_LOG, SLICES_LOG, Store
 
 FROZEN = datetime(2026, 8, 24, 9, 0, tzinfo=UTC)
 
@@ -294,3 +294,37 @@ def test_effort_detail_raises_a_named_error_for_an_unknown_effort(tmp_path: Path
 
     assert "unknown effort" in str(raised.value)
     assert "2026-01-01-does-not-exist" in str(raised.value)
+
+
+def test_a_directory_without_metadata_costs_its_own_row_and_not_the_table(prepared):
+    store, config = prepared
+    ghost = store.effort_directory("2026-08-24-thnig")
+    ghost.mkdir()
+    (ghost / INTERVALS_LOG).write_text(
+        '{"event": "clock_in", "interval": "iv-9999", "at": "2026-08-24T09:00:00+00:00"}\n'
+    )
+
+    rows = effort_table(store, config)
+
+    assert [row.effort for row in rows] == ["2026-08-24-thing"]
+    assert rows[0].wall_hours == pytest.approx(2.0)
+    assert summary(store, config).efforts_counted == 1
+
+
+def test_a_directory_with_unparseable_metadata_costs_its_own_row(prepared):
+    store, config = prepared
+    ghost = store.effort_directory("2026-08-24-corrupt")
+    ghost.mkdir()
+    (ghost / "effort.json").write_text("{not json at all\n")
+
+    assert [row.effort for row in effort_table(store, config)] == ["2026-08-24-thing"]
+
+
+def test_effort_detail_names_an_unreadable_effort_rather_than_leaking_an_os_error(prepared):
+    store, config = prepared
+    store.effort_directory("2026-08-24-thnig").mkdir()
+
+    with pytest.raises(UnknownEffort) as raised:
+        effort_detail(store, config, "2026-08-24-thnig")
+
+    assert str(raised.value) == "unknown effort: 2026-08-24-thnig"

@@ -6,6 +6,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from estimate_maestro.errors import UnknownEffort
+
 ESTIMATES_LOG = "estimates.jsonl"
 SLICES_LOG = "slices.jsonl"
 INTERVALS_LOG = "intervals.jsonl"
@@ -66,6 +68,13 @@ class Store:
                 fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
     def _append_line(self, path: Path, record: dict[str, Any]) -> None:
+        # The mkdir is for the store root only, so that the first absence can be
+        # recorded against a store nobody has initialised yet. It must never
+        # conjure an effort directory: `append` refuses an unknown effort above,
+        # because a directory grown here from a mistyped identifier would hold
+        # real work under an effort that does not exist, leave the real effort
+        # short by exactly that time, and be indistinguishable from a genuine
+        # record afterwards.
         path.parent.mkdir(parents=True, exist_ok=True)
         line = json.dumps(record, default=_encode) + "\n"
         with path.open("a", encoding="utf-8") as handle:
@@ -95,7 +104,10 @@ class Store:
                 fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
     def append(self, effort: str, log_name: str, record: dict[str, Any]) -> None:
-        self._append_line(self.effort_directory(effort) / log_name, record)
+        directory = self.effort_directory(effort)
+        if not directory.is_dir():
+            raise UnknownEffort(effort)
+        self._append_line(directory / log_name, record)
 
     def read(self, effort: str, log_name: str) -> list[dict[str, Any]]:
         return self._read_lines(self.effort_directory(effort) / log_name)

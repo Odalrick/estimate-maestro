@@ -84,40 +84,61 @@ def _calendar_days(store: Store, effort: str, intervals: list[MeasuredInterval])
     return (max(moments) - min(moments)).total_seconds() / 86400
 
 
+def _effort_row(
+    store: Store, config: Config, effort: str, absences: list[dict[str, Any]]
+) -> EffortRow:
+    """One effort's row.
+
+    Raises whatever an unreadable or malformed effort raises — the caller turns
+    that into a skipped row, the way `reference_efforts` does.
+    """
+    meta = store.read_meta(effort)
+    estimates = store.read(effort, ESTIMATES_LOG)
+    intervals = _intervals_for(store, config, effort)
+    total = wall_seconds(intervals, absences, config.working_hours)
+    derived_only = [
+        interval for interval in intervals if interval.provenance is Provenance.DERIVED_FROM_COMMITS
+    ]
+    derived_total = wall_seconds(derived_only, absences, config.working_hours)
+    return EffortRow(
+        effort=effort,
+        title=meta["title"],
+        kind=meta["kind"],
+        status=meta["status"],
+        initial=_estimate_for(estimates, EstimatePass.INITIAL),
+        final=_estimate_for(estimates, EstimatePass.FINAL),
+        wall_hours=total / 3600,
+        calendar_days=_calendar_days(store, effort, intervals),
+        slice_count_initial=_slice_count_at(estimates, EstimatePass.INITIAL),
+        slice_count_final=slice_count(store.read(effort, SLICES_LOG)),
+        derived_share=(derived_total / total) if total else 0.0,
+    )
+
+
 def effort_table(store: Store, config: Config) -> list[EffortRow]:
     absences = store.read_absences()
     rows: list[EffortRow] = []
     for effort in store.list_efforts():
-        meta = store.read_meta(effort)
-        estimates = store.read(effort, ESTIMATES_LOG)
-        intervals = _intervals_for(store, config, effort)
-        total = wall_seconds(intervals, absences, config.working_hours)
-        derived_only = [
-            interval
-            for interval in intervals
-            if interval.provenance is Provenance.DERIVED_FROM_COMMITS
-        ]
-        derived_total = wall_seconds(derived_only, absences, config.working_hours)
-        rows.append(
-            EffortRow(
-                effort=effort,
-                title=meta["title"],
-                kind=meta["kind"],
-                status=meta["status"],
-                initial=_estimate_for(estimates, EstimatePass.INITIAL),
-                final=_estimate_for(estimates, EstimatePass.FINAL),
-                wall_hours=total / 3600,
-                calendar_days=_calendar_days(store, effort, intervals),
-                slice_count_initial=_slice_count_at(estimates, EstimatePass.INITIAL),
-                slice_count_final=slice_count(store.read(effort, SLICES_LOG)),
-                derived_share=(derived_total / total) if total else 0.0,
-            )
-        )
+        # A directory under `efforts/` that carries no readable `effort.json` is
+        # not an effort, whatever else it holds. Missing or unreadable file,
+        # unparseable JSON and a JSON value that is not an object all arrive as
+        # OSError or ValueError; a meta object missing a key it needs arrives as
+        # KeyError or TypeError. One unreadable effort costs its own row, not the
+        # whole table — the calibration surface is the only way to read the store
+        # back out, and it must not be takeable down by one stray directory.
+        try:
+            rows.append(_effort_row(store, config, effort, absences))
+        except OSError, KeyError, TypeError, ValueError:
+            continue
     return rows
 
 
 def effort_detail(store: Store, config: Config, effort: str) -> EffortDetail:
-    if effort not in store.list_efforts():
+    # Sourced from the table rather than from `list_efforts`, so that an effort
+    # the table cannot read is reported by name instead of raising an OSError out
+    # of the reads below.
+    row = next((row for row in effort_table(store, config) if row.effort == effort), None)
+    if row is None:
         raise UnknownEffort(effort)
     return EffortDetail(
         meta=store.read_meta(effort),
@@ -125,7 +146,7 @@ def effort_detail(store: Store, config: Config, effort: str) -> EffortDetail:
         slices=store.read(effort, SLICES_LOG),
         intervals=store.read(effort, INTERVALS_LOG),
         commits=store.read(effort, COMMITS_LOG),
-        row=next(row for row in effort_table(store, config) if row.effort == effort),
+        row=row,
     )
 
 

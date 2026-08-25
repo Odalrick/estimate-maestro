@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from estimate_maestro.errors import UnknownEffort
 from estimate_maestro.store import ESTIMATES_LOG, MalformedRecord, Store, _encode
 
 
@@ -88,3 +89,19 @@ def test_read_lines_raises_with_line_number_for_malformed_record(store: Store):
 def test_encode_raises_type_error_for_unsupported_type():
     with pytest.raises(TypeError):
         _encode(object())
+
+
+def test_appending_to_an_effort_that_does_not_exist_is_refused(store: Store):
+    with pytest.raises(UnknownEffort) as exc_info:
+        store.append("2026-08-24-thnig", ESTIMATES_LOG, {"pass": "initial"})
+
+    assert str(exc_info.value) == "unknown effort: 2026-08-24-thnig"
+    assert not store.effort_directory("2026-08-24-thnig").exists()
+
+
+def test_an_absence_can_be_recorded_before_any_effort_exists(tmp_path: Path):
+    fresh = Store(tmp_path / "untouched")
+
+    fresh.append_absence({"kind": "vacation"})
+
+    assert fresh.read_absences() == [{"kind": "vacation"}]
