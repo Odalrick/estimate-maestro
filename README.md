@@ -131,7 +131,7 @@ disagree.
 
 | Variable                                          | Default                        | Meaning                                                                 |
 |----------------------------------------------------|---------------------------------|--------------------------------------------------------------------------|
-| `ESTIMATE_MAESTRO_STORE`                            | `~/mcp/estimate-maestro-store`  | Path to the store directory.                                            |
+| `ESTIMATE_MAESTRO_STORE`                            | `$XDG_DATA_HOME/estimate-maestro`, falling back to `~/.local/share/estimate-maestro` | Path to the store directory.                                            |
 | `ESTIMATE_MAESTRO_DAY_START`                        | `09:00`                         | Start of the working day (ISO 8601 time).                               |
 | `ESTIMATE_MAESTRO_DAY_END`                          | `17:00`                         | End of the working day (ISO 8601 time).                                 |
 | `ESTIMATE_MAESTRO_LUNCH_START`                      | `12:00`                         | Start of the daily lunch break, excluded from working seconds.          |
@@ -189,16 +189,19 @@ reconstructed from anywhere else. Keep it **private** — it holds project names
 branch names and how long things took, none of which belong in a public repo.
 
 ```sh
-mkdir -p ~/mcp/estimate-maestro-store
-git -C ~/mcp/estimate-maestro-store init
+mkdir -p ~/.local/share/estimate-maestro
+git -C ~/.local/share/estimate-maestro init
 ```
 
-Point the server and CLI at your store — add this to whatever environment
-Claude Code and your shell both see (for example your shell profile, and the
-environment passed to the MCP registration above):
+The default store location follows the XDG Base Directory Specification and
+needs no configuration. Set `ESTIMATE_MAESTRO_STORE` only if you want the store
+somewhere else — for instance alongside your other personal repositories, so it
+is easier to remember to commit and push. It must be visible to both the server
+and your shell, so put it wherever they both read (typically your shell
+profile):
 
 ```sh
-export ESTIMATE_MAESTRO_STORE=~/mcp/estimate-maestro-store
+export ESTIMATE_MAESTRO_STORE=~/somewhere/else
 ```
 
 Wire the two hook scripts into `~/.claude/settings.json`: `hooks/session-end.sh`

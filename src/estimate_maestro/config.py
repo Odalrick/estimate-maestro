@@ -3,7 +3,11 @@ from dataclasses import dataclass
 from datetime import time, timedelta
 from pathlib import Path
 
-DEFAULT_STORE_PATH = "~/mcp/estimate-maestro-store"
+# The store is user data, not configuration: it must persist, it roams between
+# machines, and it is the only copy of what it records. That is $XDG_DATA_HOME
+# per the XDG Base Directory Specification, which falls back to ~/.local/share.
+DEFAULT_STORE_DIRECTORY_NAME = "estimate-maestro"
+XDG_DATA_HOME_FALLBACK = "~/.local/share"
 
 
 @dataclass(frozen=True)
@@ -57,6 +61,11 @@ def _read_workdays(
         raise ValueError(f"{name} is not a comma-separated list of weekdays: {raw!r}") from error
 
 
+def _default_store_path(environment: Mapping[str, str]) -> str:
+    data_home = environment.get("XDG_DATA_HOME") or XDG_DATA_HOME_FALLBACK
+    return str(Path(data_home) / DEFAULT_STORE_DIRECTORY_NAME)
+
+
 def load_config(environment: Mapping[str, str]) -> Config:
     working_hours = WorkingHours(
         day_start=_read_time(environment, "ESTIMATE_MAESTRO_DAY_START", time(9, 0)),
@@ -67,7 +76,7 @@ def load_config(environment: Mapping[str, str]) -> Config:
             environment, "ESTIMATE_MAESTRO_WORKDAYS", frozenset({0, 1, 2, 3, 4})
         ),
     )
-    store = environment.get("ESTIMATE_MAESTRO_STORE", DEFAULT_STORE_PATH)
+    store = environment.get("ESTIMATE_MAESTRO_STORE") or _default_store_path(environment)
     derive_lead_in = _read_minutes(
         environment, "ESTIMATE_MAESTRO_DERIVE_LEAD_IN_MINUTES", timedelta(minutes=30)
     )

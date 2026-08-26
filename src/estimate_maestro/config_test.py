@@ -18,6 +18,26 @@ def test_defaults_apply_when_environment_is_empty():
     assert config.minimum_efforts_for_analysis == 5
 
 
+def test_the_store_defaults_to_the_xdg_data_directory():
+    config = load_config({})
+
+    assert config.store_path == Path.home() / ".local" / "share" / "estimate-maestro"
+
+
+def test_the_store_default_honours_xdg_data_home():
+    config = load_config({"XDG_DATA_HOME": "/somewhere/data"})
+
+    assert config.store_path == Path("/somewhere/data/estimate-maestro")
+
+
+def test_an_explicit_store_path_beats_xdg_data_home():
+    config = load_config(
+        {"XDG_DATA_HOME": "/somewhere/data", "ESTIMATE_MAESTRO_STORE": "~/chosen/store"}
+    )
+
+    assert config.store_path == Path.home() / "chosen" / "store"
+
+
 def test_store_path_expands_a_leading_tilde():
     config = load_config({"ESTIMATE_MAESTRO_STORE": "~/somewhere/store"})
 
