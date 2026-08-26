@@ -179,6 +179,11 @@ Register the MCP server:
 claude mcp add --scope user maestro-estimate -- uv --directory ~/mcp/estimate-maestro run estimate-maestro
 ```
 
+The registered name inverts the directory name on purpose. On disk the server sits among other MCP servers, where
+`estimate` is the half that distinguishes it and the half that sorts usefully; registered with an agent, `maestro` is
+the more interesting half, because there the provenance is what matters — it marks the server as one of mine rather
+than something installed from elsewhere.
+
 Symlink the two skills into your personal skills directory:
 
 ```sh
