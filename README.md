@@ -3,47 +3,52 @@
 A personal MCP server and command-line tool for recording estimates and wall time, so that estimates can eventually be
 checked against outcomes instead of against feeling.
 
-This is _currently_ a data collection tool for estimation calibration, not an estimator. It never estimates anything for
-you. It records what you estimated a piece of work at, what the plan turned out to be, and how much wall time the work
+Today it is a data collection tool for estimation calibration, not an estimator: it does not estimate anything for you.
+It records what you estimated a piece of work at, what the plan turned out to be, and how much wall time the work
 actually took. What you do with that record — comparing, noticing drift, deciding you were consistently optimistic about
-a certain kind of work — is up to you and to whatever reads the store later. The tool's job stops at recording honestly.
+a certain kind of work — is up to you and to whatever reads the store later. Through version 1.0.0 the tool's job stops
+at recording honestly.
 
-Future goals include both support for your own estimates, and actions to let an LLM do estimates.
+That is the scope of the first version, not the scope of the project. Helping you make your own estimates, and
+eventually handing the estimating itself to an LLM or something like it, are both in scope later — and both need this
+record to exist first.
 
 ## The model
 
 Four kinds of thing get recorded:
 
-- **Effort** — a piece of work that is supposed to be estimated. Two things are required: a plan and a size. An effort
-  exists from the moment it has a plan artefact (a spec, a `.PR.md`, whatever the plan lives in) and an initial
-  estimate. Before that point there is nothing to record yet. The estimate of the effort is supposed to exclude the time
-  to make the plan in the first place; because time recording starts once the plan exists so including the planning time
-  in the estimate would skew the recorded feedback.
+- **Effort** — a piece of work that is supposed to be estimated: a pull request, a mega-PR, anything with a plan and an
+  estimate. An effort exists from the moment it has a plan artefact (a spec, a `.PR.md`, whatever the plan lives in) and
+  an initial estimate. Before that point there is nothing to record yet. The estimate excludes the time spent making the
+  plan: recording starts once the plan exists, so counting the planning time in the estimate would skew the feedback.
 - **Slice** — a piece of an effort, one step of the plan. Slices are added, closed against a pull request, dropped, or
   renamed. A slice added before the effort starts is part of the original plan; one added afterwards is scope growth,
   and the two are kept distinguishable in the record.
-- **Interval** — a clocked-in span of time, ordinarily against a slice. Intervals are closed manually, closed
-  automatically when a session ends with the clock still running, or derived after the fact from commit timestamps when
-  nothing was clocked in at all.
+- **Interval** — a clocked-in span of time, ordinarily against a slice, or against the effort itself when there is
+  nothing finer to clock against. Intervals are closed manually, closed automatically when a session ends with the
+  clock still running, or derived after the fact from commit timestamps when nothing was clocked in at all.
 - **Absence** — time that was not worked at all: a holiday, an appointment, an unrelated meeting. Absences can be
-  recorded retroactively and are expected to be. They subtract from whatever interval they overlap.
+  recorded retroactively and are expected to be.
 
-## Output
+## The five things
 
-There are five major pieces of data that the tool is built to record and make available to refine estimations:
+Five pieces of data are what the tool exists to produce:
 
-Initial estimate, initial plan, final estimate, final/execute plan, and total wall time taken for the _one_ person
-working on the Effort.
+- the initial estimate;
+- the initial plan;
+- the final estimate;
+- the final plan — the plan you actually executed;
+- the total wall time taken, by the _one_ person working on the effort.
 
-All other recording is just in support of those five outputs. The nature of that recording means other pieces of
-statistics could be collected, but those aren't primary artefacts.
+Everything else that gets recorded is in support of those five. The nature of the recording means other statistics
+could be collected too, but they are by-products rather than the artefacts the tool is built to deliver.
 
-This is important to note since the future work on helping with estimates will be built on those five things, and any
-system that can provide those five things will work equally well.
+This matters because the later work on helping with estimates will be built on those five things, and any system that
+can provide them will serve equally well.
 
-## Estimates: three-point triples in story points
+## Estimates: three-point triples in points
 
-Every estimate is a **PERT triple** — optimistic, likely, pessimistic — given in an abstract points scale, never in
+Every estimate is a **PERT triple** — optimistic, likely, pessimistic — given on an abstract points scale, never in
 hours. The expected value and the standard deviation are derived from the triple on read; nothing stores a single "the
 estimate is N" number, because a bare number throws away the uncertainty that made it an estimate rather than a fact.
 
@@ -51,9 +56,15 @@ Points are anchored by comparing the work at hand to prior efforts of similar sh
 hours into points in your head. The whole point of an abstract scale is to compare like with like across efforts whose
 actual duration you don't yet know.
 
-An effort is estimated **twice**:
+Which scale is left entirely to you. Any numeric, roughly linear scale will do — this is a single-person tool, so the
+points only ever have to mean something next to your own earlier estimates. Even consistency over time is a convenience
+rather than a requirement: if you would size the same work at 50 points one year and 70 the next, the record still
+tells you what you need to know.
 
-- The **initial** estimate, made against the plan as first written, at the same slice count the plan started with.
+Two estimates are what the tool actually uses:
+
+- The **initial** estimate, made against the plan as first written, covering the slices the plan started with rather
+  than the ones it grew.
 - The **final** estimate, made at the retrospective against the plan as it actually turned out — including every slice
   inserted along the way. This is a **counterfactual**: "given everything you now know about how this actually shook
   out, what would you have estimated?" — never "how long did it take?", and never a measurement of anything.
@@ -64,86 +75,89 @@ assumed to exist turned out not to. The final pass, made against the plan as it 
 error** — the items that were known about all along and simply judged wrongly. A single number per effort conflates the
 two; two numbers, one per pass, keep them apart.
 
-A revised estimate can also be recorded mid-effort — typically when a slice is inserted that was not in the original
-plan — without waiting for the retrospective.
+Revised estimates can also be recorded mid-effort — typically when a slice is inserted that was not in the original
+plan — without waiting for the retrospective. Re-estimating as the plan grows is a healthy part of the process, so the
+revisions are kept; but nothing reads them back yet, and only the initial and the final estimate feed the record. The
+data is there in case a use for the middle turns up.
 
-Another important reason for the final reestimate is to train estimation skills. Given what I know now, how should I
-adapt my estimation skills for the future.
+The final re-estimate has a second purpose: it trains the skill. Given what you now know, how should you estimate work
+of this shape next time?
 
 ## The time model: a normal day is assumed
 
-A normal working day, is assumed by default. Clocking in and out is still the normal workflow, but if one is missed it
-should self-heal with reasonable accuracy.
+A normal working day is assumed by default. Clocking in and out is still the ordinary workflow, but a missed clock-out
+should self-heal with reasonable accuracy rather than leaving a hole in the record.
 
-A normal working day is 9-17, with one hour lunch. This is below 8h per day, but this is intended to account for
+The assumed day is 09:00–17:00, with one hour of lunch. That is under eight hours on purpose: the shortfall accounts for
 meetings and other time not spent on the project.
 
-- Manually clocked time counts in full, whatever hours it falls in. Evenings and weekends included: if you clocked in at
-  22:00 on a Saturday, that recorded, with no working-hours adjustment applied to it.
-- The working-hours model only ever applies where timestamps are missing. There are exactly two places it is used:
-    - Ending a forgotten timer. If a session ends with the clock still running, the interval is closed at the configured
-      end of the day rather than staying open indefinitely.
-    - **Reconstructing intervals from commit timestamps** when nothing was ever clocked in for a slice. A cluster of
-      nearby commits becomes a derived working session, using the working-hours model to decide how much of the span
-      between them counts as work rather than an overnight gap.
+- **Manually clocked time counts in full**, whatever hours it falls in. Evenings and weekends included: if you clocked
+  in at 22:00 on a Saturday, that is what gets recorded, with no working-hours adjustment applied to it.
+- **The working-hours model only ever applies where timestamps are missing.** There are exactly two places it is used:
+  - **Ending a forgotten timer.** If a session ends with the clock still running, the interval is closed at the
+    configured end of the day rather than staying open indefinitely.
+  - **Reconstructing intervals from commit timestamps** when nothing was ever clocked in for a slice. A cluster of
+    nearby commits becomes a derived working session, using the working-hours model to decide how much of the span
+    between them counts as work rather than an overnight gap.
 
-Note that the session started at 22 on a Saturday but never ended, is considered ended 17 on Sunday. This is of course an
-unreasonable time to record, unlikely to be accurate; but the simplicity makes the effects predictable, and the
-expectation is that the tool "remembers" to record the times. Probably more reasonable times can be reconstructed from
-commit logs after the fact.
+Every calendar day carries the same working hours; there is no concept of a non-working day. So the session started at
+22:00 on the Saturday but never ended is considered ended at 17:00 on the Sunday. That is of course an unreasonable time
+to record and unlikely to be accurate, but the simplicity makes the effects predictable, and it bounds the damage at
+roughly a day: a session left running from 17:01 on a Friday closes at 17:00 on the Saturday, rather than accruing
+credit all the way to Monday. The expectation is that the tooling "remembers" the clock-out for you, so the fallback is
+rarely reached, and more reasonable times can usually be reconstructed from commit logs after the fact.
 
-An absence recorded over a span subtracts from any interval — clocked or derived — that it overlaps, in full for a
-manually clocked interval and through the working-hours model for a derived one.
+An absence recorded over a span subtracts from any interval — clocked or derived — that it overlaps: in full from a
+manually clocked interval, and through the same reconstruction that produced a derived one.
 
 ## Tool categories and the taint rule
 
 Every tool the MCP server exposes falls into exactly one category:
 
-- **recording** — `start_effort`, `add_slice`, `close_slice`, `drop_slice`,
-  `rename_slice`, `clock_in`, `clock_out`, `annotate_interval`,
-  `repair_interval`, `record_absence`, `record_revision`,
-  `record_final_plan`, `harvest_commits`, `record_landed_commit`,
-  `remap_commits`, `finish_effort`.
+- **recording** — `start_effort`, `add_slice`, `close_slice`, `drop_slice`, `rename_slice`, `clock_in`, `clock_out`,
+  `annotate_interval`, `repair_interval`, `record_absence`, `record_revision`, `record_final_plan`, `harvest_commits`,
+  `record_landed_commit`, `remap_commits`, `finish_effort`.
 - **status** — `current`, which reports what is clocked in and since when.
-- **estimation** — `reference_efforts`, which shows prior efforts for comparison while an estimate is being made.
+- **estimation** — `reference_efforts`, which shows the estimates recorded against prior efforts, for comparison while a
+  new estimate is being made.
 - **calibration** — `effort_table`, `effort_detail`, `summary`, which read the accumulated record back out.
 
 **Recording, estimation and status tools never return a duration or an aggregate. Only calibration tools may.** This is
 enforced structurally: every response model used by a recording, estimation or status tool is checked for field names
-containing words like `hours`, `minutes`, `duration`, `wall`, `average`, or `share`, and the check fails if one is
-found.
+containing `hours`, `minutes`, `duration`, `wall`, `average`, or `share`, and the check fails if one is found.
 
-The reason is not tidiness. An estimate made after seeing the real duration of the work is an anchored echo of that
-duration, not an independent judgement — the number you'd produce is contaminated by having just seen the answer. The
-taint rule keeps a wall-time figure from ever surfacing in a tool response while an estimate is being made or a clock is
-being run, so that the initial-versus-final comparison stays honest. Calibration tools are exempt because their entire
-purpose is to report exactly those figures, once the estimating is done.
+The reason is narrower than it can look. An estimate made just after seeing the real duration of the work is an anchored
+echo of that duration rather than an independent judgement; the concrete case to avoid is a final estimate landing on 10
+because the clock-out just before it reported ten hours on the effort. So the rule keeps a wall-time figure from
+surfacing in a tool response while an estimate is being made or a clock is being run. It is a guard against accidental
+anchoring, not a claim that durations are dangerous — the estimation tools deliberately show prior estimates, which is
+what makes an abstract scale usable at all. Calibration tools are exempt because reporting exactly those figures is
+their entire purpose, once the estimating is done.
 
-The estimation and calibration tools are very limited in the initial release. Usage will be needed to refine them to
+The estimation and calibration tools are very limited in the initial release. Usage will be needed to refine them into
 worthwhile tools, but we have to start somewhere. They are a guess at what will be useful, and serve as validation that
 everything needed is recorded.
 
 ## Environment variables
 
-All are optional; every one has a default. Read from
-`src/estimate_maestro/config.py`, not from this list, if the two ever disagree.
+All are optional; every one has a default. Read from `src/estimate_maestro/config.py`, not from this list, if the two
+ever disagree.
 
-| Variable                       | Default                                                                              | Meaning                                                                     |
-|--------------------------------|--------------------------------------------------------------------------------------|-----------------------------------------------------------------------------|
-| `ESTIMATE_MAESTRO_STORE`       | `$XDG_DATA_HOME/estimate-maestro`, falling back to `~/.local/share/estimate-maestro` | Path to the store directory.                                                |
-| `ESTIMATE_MAESTRO_DAY_START`   | `09:00`                                                                              | Start of the working day (ISO 8601 time).                                   |
-| `ESTIMATE_MAESTRO_DAY_END`     | `17:00`                                                                              | End of the working day (ISO 8601 time).                                     |
-| `ESTIMATE_MAESTRO_LUNCH_START` | `12:00`                                                                              | Start of the daily lunch break, excluded from working seconds.              |
-| `ESTIMATE_MAESTRO_LUNCH_END`   | `13:00`                                                                              | End of the daily lunch break.                                               |
-| `ESTIMATE_MAESTRO_WORKDAYS`    | `0,1,2,3,4`                                                                          | Comma-separated weekdays counted as working days (Monday `0` … Sunday `6`). |
+| Variable                       | Default                                                                              | Meaning                                                        |
+|--------------------------------|--------------------------------------------------------------------------------------|----------------------------------------------------------------|
+| `ESTIMATE_MAESTRO_STORE`       | `$XDG_DATA_HOME/estimate-maestro`, falling back to `~/.local/share/estimate-maestro` | Path to the store directory.                                   |
+| `ESTIMATE_MAESTRO_DAY_START`   | `09:00`                                                                              | Start of the working day (ISO 8601 time).                      |
+| `ESTIMATE_MAESTRO_DAY_END`     | `17:00`                                                                              | End of the working day (ISO 8601 time).                        |
+| `ESTIMATE_MAESTRO_LUNCH_START` | `12:00`                                                                              | Start of the daily lunch break, excluded from working seconds. |
+| `ESTIMATE_MAESTRO_LUNCH_END`   | `13:00`                                                                              | End of the daily lunch break.                                  |
 
-`ESTIMATE_MAESTRO_DERIVE_LEAD_IN_MINUTES` must not exceed
-`ESTIMATE_MAESTRO_DERIVE_SESSION_GAP_MINUTES`; the server refuses to start otherwise.
+The working-hours model has no other levers: the day boundaries and the lunch break are the whole of it. Anything more
+would be collecting configuration for its own sake.
 
 ## The command-line tool
 
-`estimate-maestro-cli` covers the everyday recording actions that do not need a conversation: `clock-in`, `clock-out`,
-`current`, `record-absence`, `effort-table`, and `summary`.
+`estimate-maestro-cli` covers the everyday actions that do not need a conversation: `clock-in`, `clock-out`, `current`,
+`record-absence`, `effort-table`, and `summary`.
 
 Actions that only make sense as part of an estimating conversation — starting an effort, revising an estimate, recording
 the final plan, harvesting commits — are MCP tools only, not CLI commands, on purpose: they are meant to happen inside a
@@ -178,8 +192,9 @@ from anywhere else. Keep it **private** — it holds project names, branch names
 belong in a public repo.
 
 ```sh
-mkdir -p ~/.local/share/estimate-maestro
-git -C ~/.local/share/estimate-maestro init
+store="${XDG_DATA_HOME:-$HOME/.local/share}/estimate-maestro"
+mkdir -p "$store"
+git -C "$store" init
 ```
 
 The default store location follows the XDG Base Directory Specification and needs no configuration. Set
@@ -191,9 +206,9 @@ put it wherever they both read (typically your shell profile):
 export ESTIMATE_MAESTRO_STORE=~/somewhere/else
 ```
 
-Wire the two hook scripts into `~/.claude/settings.json`: `hooks/session-end.sh`
-as a `SessionEnd` hook (closes a forgotten timer, clamped to the configured working day) and `hooks/session-start.sh` as
-a `SessionStart` hook (reports whether a timer is already running):
+Wire the two hook scripts into `~/.claude/settings.json`: `hooks/session-start.sh` as a `SessionStart` hook (reports
+whether a timer is already running) and `hooks/session-end.sh` as a `SessionEnd` hook (closes a forgotten timer at the
+configured end of the day):
 
 ```json
 {
