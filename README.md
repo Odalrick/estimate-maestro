@@ -25,8 +25,7 @@ Four kinds of thing get recorded:
   renamed. A slice added before the effort starts is part of the original plan; one added afterwards is scope growth,
   and the two are kept distinguishable in the record.
 - **Interval** — a clocked-in span of time, ordinarily against a slice, or against the effort itself when there is
-  nothing finer to clock against. Intervals are closed manually, or closed automatically when a session ends with the
-  clock still running.
+  nothing finer to clock against. Intervals are closed by clocking out.
 - **Absence** — time that was not worked at all: a holiday, an appointment, an unrelated meeting. Absences can be
   recorded retroactively and are expected to be.
 
@@ -85,23 +84,24 @@ of this shape next time?
 
 ## The time model: a normal day is assumed
 
-A normal working day is assumed by default. Clocking in and out is still the ordinary workflow, but a missed clock-out
-should self-heal with reasonable accuracy rather than leaving a hole in the record.
+A normal working day is assumed by default. Clocking in and out is the ordinary workflow. A missed clock-out leaves the
+timer running until something closes it, and the working-hours model decides where it is closed.
 
 The assumed day is 09:00–17:00, with one hour of lunch, Monday to Friday. That is under eight hours on purpose: the
 shortfall accounts for meetings and other time not spent on the project.
 
 - **Manually clocked time counts in full**, whatever hours it falls in. Evenings and weekends included: if you clocked
   in at 22:00 on a Saturday, that is what gets recorded, with no working-hours adjustment applied to it.
-- **The working-hours model only ever applies where a timestamp is missing: ending a forgotten timer.** If a session
-  ends with the clock still running, the interval is closed at the end of the working day it started in. A session that
-  started outside working hours — before 09:00, from 17:00 on, or on a day that is not a working day — has no working
-  day to close against, so it is capped at four hours instead.
+- **The working-hours model only ever applies where a timestamp is missing: ending a forgotten timer.** Closed with
+  `estimate-maestro-cli clock-out --at-last-activity <moment>`, the interval ends at that moment or at the end of the
+  working day it started in, whichever is earlier. A session that started outside working hours — before 09:00, from
+  17:00 on, or on a day that is not a working day — has no working day to close against, so it is capped at four hours
+  instead.
 
 So the session started at 22:00 on the Saturday but never ended is considered ended at 02:00 on the Sunday, and one left
 running from 17:01 on a Friday closes at 21:01 that evening rather than accruing credit all the way to Monday. Either is
-unlikely to be accurate, but both are predictable and bound the damage. The expectation is that the tooling "remembers"
-the clock-out for you, so the fallback is rarely reached.
+unlikely to be accurate, but both are predictable and bound the damage. Nothing closes a forgotten timer automatically
+at the moment; see `BACKLOG.md`.
 
 An absence recorded over a span subtracts in full from any interval it overlaps.
 
@@ -166,11 +166,11 @@ session that shows comparable prior efforts, not as a bare command typed without
 
 ### Exit codes
 
-| Code | Meaning                                                                                                                                                  |
-| ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `0`  | Success.                                                                                                                                                 |
-| `1`  | An error occurred.                                                                                                                                       |
-| `3`  | `clock-out` only: nothing was clocked in. Expected, not a failure — a script wiring `clock-out` into an automatic hook should treat `3` the same as `0`. |
+| Code | Meaning                                                                                                                                        |
+| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `0`  | Success.                                                                                                                                       |
+| `1`  | An error occurred.                                                                                                                             |
+| `3`  | `clock-out` only: nothing was clocked in. Expected, not a failure — a script that clocks out unconditionally should treat `3` the same as `0`. |
 
 ## Installation
 
@@ -211,40 +211,6 @@ put it wherever they both read (typically your shell profile):
 ```sh
 export ESTIMATE_MAESTRO_STORE=~/somewhere/else
 ```
-
-Wire the two hook scripts into `~/.claude/settings.json`: `hooks/session-start.sh` as a `SessionStart` hook (reports
-whether a timer is already running) and `hooks/session-end.sh` as a `SessionEnd` hook (closes a forgotten timer at the
-configured end of the day):
-
-```json
-{
-    "hooks": {
-        "SessionStart": [
-            {
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": "~/mcp/estimate-maestro/hooks/session-start.sh"
-                    }
-                ]
-            }
-        ],
-        "SessionEnd": [
-            {
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": "~/mcp/estimate-maestro/hooks/session-end.sh"
-                    }
-                ]
-            }
-        ]
-    }
-}
-```
-
-Merge that into the existing `hooks` block in `~/.claude/settings.json` rather than overwriting it, if one is already
-there.
 
 ## Development
 

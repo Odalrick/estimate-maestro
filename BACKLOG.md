@@ -53,6 +53,25 @@ Decided, not yet built. The README describes the code as it is; these describe w
 
 ## Open design questions
 
+- **What closes a forgotten timer?** Nothing, today. There were two Claude Code hooks — `SessionStart` reporting a
+  running timer, `SessionEnd` clocking out — deleted on 2026-10-19 because they measured the wrong thing. They assumed
+  one Claude Code session spans one working session, and it does not:
+
+  - A session left open overnight fires nothing, so the timer ran until some session ended, possibly days later.
+  - `SessionEnd` fires on `/clear` and on switching sessions with `/resume`, so it clocked out mid-work; before 17:00
+    the clamp did not bound it.
+  - `clock-out` closes whatever timer is running, so ending a session in any project, or in a terminal reused for
+    something else, clocked out the effort.
+  - The hook passed the moment the session ended as the last activity, so the recorded stop was never when work actually
+    stopped.
+
+  `SessionStart` was harmless, but fired again after every `/clear` and compaction. Whether `SessionEnd` fires at all
+  when a terminal is closed or the process is killed is undocumented.
+
+  Better signals exist: `UserPromptSubmit` and `Stop` fire on real activity, and inside the project. A hook could record
+  the latest activity per working tree, and a clock-out could close at the last activity belonging to the effort — the
+  CLI's `--at-last-activity` already takes that moment. Commit backfill (above) is the other half of the same problem.
+
 - **Who commits the store, and when?** Undecided. The store is a git repository and the whole reason its files are
   append-only JSONL rather than SQLite is that it is "git-backed and roams between machines" — but nothing in the code
   commits it, and nothing prompts you to. Committing is currently manual and unprompted. The definition of done tests
@@ -70,6 +89,9 @@ Decided, not yet built. The README describes the code as it is; these describe w
     takes.
 
   Pushing is a separate question from committing, and can stay manual under any of the three.
+
+  The first and third candidates were written against the `SessionEnd` hook, which is gone — see the forgotten-timer
+  question above. A Claude Code session is no better a boundary for committing than for clocking out.
 
 ## Known gaps
 

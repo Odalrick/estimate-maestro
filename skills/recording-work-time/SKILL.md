@@ -45,11 +45,11 @@ interval, not only meetings, and is also the way to attach a note after the fact
 - Forgot, and remembered later: `clock_out(at="<ISO 8601>")`. A timestamp earlier than the clock-in is refused rather
   than recorded as a session of zero length — check the date when that happens.
 
-A timer left running is closed by the `SessionEnd` hook, clamped to the configured quit time. That is a normal outcome,
-not a failure — the model assumes a normal day and only deviations need recording. The hook drives the
-`estimate-maestro-cli` clock-out command, whose exit code tells the calling script what happened: `0` means it clocked
-out successfully, `1` means a real error, and `3` means nothing was clocked in — expected and frequent, not a failure.
-Anyone wiring the hook should treat `3` the same as `0`, not as an error to surface.
+Nothing closes a timer left running. When `current()` shows one still open long after the work stopped, close it with
+`clock_out(at="<ISO 8601>")` if the moment the work stopped is known. If it is not, the user can run
+`estimate-maestro-cli clock-out --at-last-activity <moment>`, which clamps the interval to the end of the working day it
+started in — that is the working-hours model doing its job, not a failure. The command exits `0` when it clocked out,
+`1` on a real error, and `3` when nothing was clocked in, which is expected rather than an error to surface.
 
 Clocking out does not harvest commits. `harvest_commits(effort, work_slice,
 path, since, until)` is a separate, explicit
