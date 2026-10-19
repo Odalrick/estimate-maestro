@@ -25,8 +25,8 @@ Four kinds of thing get recorded:
   renamed. A slice added before the effort starts is part of the original plan; one added afterwards is scope growth,
   and the two are kept distinguishable in the record.
 - **Interval** — a clocked-in span of time, ordinarily against a slice, or against the effort itself when there is
-  nothing finer to clock against. Intervals are closed manually, closed automatically when a session ends with the
-  clock still running, or derived after the fact from commit timestamps when nothing was clocked in at all.
+  nothing finer to clock against. Intervals are closed manually, closed automatically when a session ends with the clock
+  still running, or derived after the fact from commit timestamps when nothing was clocked in at all.
 - **Absence** — time that was not worked at all: a holiday, an appointment, an unrelated meeting. Absences can be
   recorded retroactively and are expected to be.
 
@@ -40,8 +40,8 @@ Five pieces of data are what the tool exists to produce:
 - the final plan — the plan you actually executed;
 - the total wall time taken, by the _one_ person working on the effort.
 
-Everything else that gets recorded is in support of those five. The nature of the recording means other statistics
-could be collected too, but they are by-products rather than the artefacts the tool is built to deliver.
+Everything else that gets recorded is in support of those five. The nature of the recording means other statistics could
+be collected too, but they are by-products rather than the artefacts the tool is built to deliver.
 
 This matters because the later work on helping with estimates will be built on those five things, and any system that
 can provide them will serve equally well.
@@ -58,8 +58,8 @@ actual duration you don't yet know.
 
 Which scale is left entirely to you. Any numeric, roughly linear scale will do — this is a single-person tool, so the
 points only ever have to mean something next to your own earlier estimates. Even consistency over time is a convenience
-rather than a requirement: if you would size the same work at 50 points one year and 70 the next, the record still
-tells you what you need to know.
+rather than a requirement: if you would size the same work at 50 points one year and 70 the next, the record still tells
+you what you need to know.
 
 Two estimates are what the tool actually uses:
 
@@ -75,8 +75,8 @@ assumed to exist turned out not to. The final pass, made against the plan as it 
 error** — the items that were known about all along and simply judged wrongly. A single number per effort conflates the
 two; two numbers, one per pass, keep them apart.
 
-Revised estimates can also be recorded mid-effort — typically when a slice is inserted that was not in the original
-plan — without waiting for the retrospective. Re-estimating as the plan grows is a healthy part of the process, so the
+Revised estimates can also be recorded mid-effort — typically when a slice is inserted that was not in the original plan
+— without waiting for the retrospective. Re-estimating as the plan grows is a healthy part of the process, so the
 revisions are kept; but nothing reads them back yet, and only the initial and the final estimate feed the record. The
 data is there in case a use for the middle turns up.
 
@@ -144,7 +144,7 @@ All are optional; every one has a default. Read from `src/estimate_maestro/confi
 ever disagree.
 
 | Variable                       | Default                                                                              | Meaning                                                        |
-|--------------------------------|--------------------------------------------------------------------------------------|----------------------------------------------------------------|
+| ------------------------------ | ------------------------------------------------------------------------------------ | -------------------------------------------------------------- |
 | `ESTIMATE_MAESTRO_STORE`       | `$XDG_DATA_HOME/estimate-maestro`, falling back to `~/.local/share/estimate-maestro` | Path to the store directory.                                   |
 | `ESTIMATE_MAESTRO_DAY_START`   | `09:00`                                                                              | Start of the working day (ISO 8601 time).                      |
 | `ESTIMATE_MAESTRO_DAY_END`     | `17:00`                                                                              | End of the working day (ISO 8601 time).                        |
@@ -166,7 +166,7 @@ session that shows comparable prior efforts, not as a bare command typed without
 ### Exit codes
 
 | Code | Meaning                                                                                                                                                  |
-|------|----------------------------------------------------------------------------------------------------------------------------------------------------------|
+| ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `0`  | Success.                                                                                                                                                 |
 | `1`  | An error occurred.                                                                                                                                       |
 | `3`  | `clock-out` only: nothing was clocked in. Expected, not a failure — a script wiring `clock-out` into an automatic hook should treat `3` the same as `0`. |
@@ -181,8 +181,8 @@ claude mcp add --scope user maestro-estimate -- uv --directory ~/mcp/estimate-ma
 
 The registered name inverts the directory name on purpose. On disk the server sits among other MCP servers, where
 `estimate` is the half that distinguishes it and the half that sorts usefully; registered with an agent, `maestro` is
-the more interesting half, because there the provenance is what matters — it marks the server as one of mine rather
-than something installed from elsewhere.
+the more interesting half, because there the provenance is what matters — it marks the server as one of mine rather than
+something installed from elsewhere.
 
 Symlink the two skills into your personal skills directory:
 
