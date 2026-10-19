@@ -87,6 +87,15 @@ Decided, not yet built. The README describes the code as it is; these describe w
   simpler time model, and which settings survive the prune may all fall away or change shape once time is counted this
   way.
 
+  The working name is **workdayish**. The "-ish" says plainly that it is an approximation rather than a measurement, and
+  it cannot be mistaken for "working day" or "calendar day", which already mean specific things here. Still open: the
+  plural ("3.5 workdayish" reads oddly) — perhaps the concept keeps the name while fields and output use a plainer
+  count.
+
+  Whatever the unit is called, its name joins the taint guard's `FORBIDDEN_NAME_PARTS` (`responses.py`) in the same
+  change that introduces it, with a test that a response field carrying it is refused. The list has `"days"` but not
+  `"day"`, so a `workdayish` field would pass the guard today.
+
 - **What closes a forgotten timer?** Nothing, today. There were two Claude Code hooks — `SessionStart` reporting a
   running timer, `SessionEnd` clocking out — deleted on 2026-10-19 because they measured the wrong thing. They assumed
   one Claude Code session spans one working session, and it does not:
