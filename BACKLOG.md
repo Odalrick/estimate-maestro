@@ -28,9 +28,10 @@ Decided, not yet built. The README describes the code as it is; these describe w
   out of the documented configuration without saying so; whether it goes too is unsettled.
 
 - **The default store is named `estimate-maestro-data`**, not `estimate-maestro`:
-  `$XDG_DATA_HOME/estimate-maestro-data`, falling back to `~/.local/share/estimate-maestro-data`. The reasoning comes
-  from the game library in `notes-jubilant-guacamole`, whose data repository is `Odalrick/game-library-data` on GitHub —
-  though its local default is still plain `game-library`. The reasoning itself is not yet written down here.
+  `$XDG_DATA_HOME/estimate-maestro-data`, falling back to `~/.local/share/estimate-maestro-data`. The store is a git
+  repository in its own right, and it should not compete with the code repository for the same name: wherever the two
+  meet — a GitHub account, a list of remotes, a backup — `estimate-maestro` is already the code. The game library's data
+  repository follows the same reasoning (`Odalrick/game-library-data`).
 
   An existing store at the old default needs moving by hand; nothing migrates it.
 
