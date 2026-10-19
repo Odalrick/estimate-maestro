@@ -20,12 +20,21 @@ Decided, not yet built. The README describes the code as it is; these describe w
   It reaches further than clamping: `working_seconds_between` also skips non-working days, so commits made at a weekend
   would start counting as derived working time.
 
-- **Fewer configuration levers.** The day boundaries and the lunch break are meant to be the whole of the working-hours
-  model; anything more is collecting configuration for its own sake. That retires `ESTIMATE_MAESTRO_WORKDAYS` and
-  `ESTIMATE_MAESTRO_OFF_HOURS_SESSION_CAP_MINUTES` with the change above, and turns
-  `ESTIMATE_MAESTRO_DERIVE_LEAD_IN_MINUTES` and `ESTIMATE_MAESTRO_DERIVE_SESSION_GAP_MINUTES` into constants — and with
-  them the start-up refusal when one exceeds the other. The editorial pass also left `ESTIMATE_MAESTRO_MINIMUM_EFFORTS`
-  out of the documented configuration without saying so; whether it goes too is unsettled.
+- **Revisit and prune the configuration.** Ten environment variables is setting-poison: entirely too many levers to
+  tweak, each one a way for two machines to disagree about the same record.
+
+  - `ESTIMATE_MAESTRO_STORE` stays, and is the only environment variable: it is the one setting that has to be known
+    before the store can be found.
+  - Whatever survives the prune moves into the store as a plain config file — JSON, JSONC or TOML, not yet chosen — so
+    it is versioned with the data it shapes and roams with it.
+  - Every other setting is either nuked or turned into a constant. `ESTIMATE_MAESTRO_DAY_START` looks useless: it only
+    decides whether a forgotten timer started inside the working day (`clock.py:39`), and bounds working seconds on the
+    commit-derived path nothing reaches. The lunch settings, likewise, only affect that unreachable path. The simpler
+    time model above retires `ESTIMATE_MAESTRO_WORKDAYS` and `ESTIMATE_MAESTRO_OFF_HOURS_SESSION_CAP_MINUTES`; the two
+    derive settings were already meant to become constants, taking the start-up refusal when one exceeds the other with
+    them; and whether `ESTIMATE_MAESTRO_MINIMUM_EFFORTS` survives is unsettled.
+
+  "Days" as the unit of time (below) may change which settings make sense at all, so settle that first.
 
 - **The default store is named `estimate-maestro-data`**, not `estimate-maestro`:
   `$XDG_DATA_HOME/estimate-maestro-data`, falling back to `~/.local/share/estimate-maestro-data`. The store is a git
@@ -52,6 +61,31 @@ Decided, not yet built. The README describes the code as it is; these describe w
   recording skill that invokes it. The README says nothing about derived time until this exists.
 
 ## Open design questions
+
+- **What gets stored, and when?** Review the event vocabulary down to what the five things need. The guess is that this
+  suffices:
+
+  - **start slice** and **still working on slice** — possibly one event;
+  - **pause slice** and **end slice** — possibly one event;
+  - the initial and follow-up estimates, with their details.
+
+  Anything else is backfilled, with those same events — a backfilled start is a start, carrying its provenance, not a
+  different kind of record. That makes commit backfill (above) and closing a forgotten timer (below) writers of the
+  ordinary events rather than read-time special cases.
+
+  For comparison, today's store keeps five logs per effort and a shared absence log: estimates (`initial`, `revision`,
+  `final`), slices (`added`, `closed`, `dropped`, `renamed`), intervals (`clock_in`, `clock_out`, `annotate`, `repair`,
+  with provenance `manual`, `clamped`, `derived_from_commits` or `repaired`), commits (`harvested`, `landed`, `remap`),
+  and absences.
+
+- **Time kept in days, not hours.** A "day" here is not a calendar day but an aggregate: an idea of a working day
+  combined with a calendar day. Roughly, time logged on a slice within one calendar day, divided by six hours, capped at
+  one. Parallel work is allowed, so one calendar day can add up to more than one day across slices — but never more than
+  one for a single slice. The concept needs designing properly before anything is built on it.
+
+  It reaches most of the rest: the working-hours model, the clamping of a forgotten timer, the lunch break, the pending
+  simpler time model, and which settings survive the prune may all fall away or change shape once time is counted this
+  way.
 
 - **What closes a forgotten timer?** Nothing, today. There were two Claude Code hooks — `SessionStart` reporting a
   running timer, `SessionEnd` clocking out — deleted on 2026-10-19 because they measured the wrong thing. They assumed
