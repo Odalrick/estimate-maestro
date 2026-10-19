@@ -35,6 +35,22 @@ Decided, not yet built. The README describes the code as it is; these describe w
 
   An existing store at the old default needs moving by hand; nothing migrates it.
 
+- **Fix commit harvesting.** The intent was always a manual step that _backfills_ working time from commits, for work
+  that was never clocked. The pieces exist but nothing reaches them:
+
+  - `calibration.py` rebuilds sessions from harvested commits on every read (`_intervals_for`, via
+    `timesheet.derive_intervals`), but only for a slice that has never been clocked in.
+  - The only harvest the recording skill describes is of a clocked window — `current()`, `clock_out()`, then
+    `harvest_commits` from the clock-in moment — so its commits always belong to a clocked slice, and the derivation
+    skips them.
+  - A single clock-in switches derivation off for the whole slice, so a day that was forgotten within a slice that was
+    clocked on other days contributes nothing, even when its commits were harvested.
+  - `remap_commits` records an event that nothing reads.
+
+  Still to settle: backfilling the time no clocked interval covers, rather than switching per slice; whether backfilled
+  intervals are recorded as events, with their provenance, or computed on every read as now; and the step in the
+  recording skill that invokes it. The README says nothing about derived time until this exists.
+
 ## Open design questions
 
 - **Who commits the store, and when?** Undecided. The store is a git repository and the whole reason its files are
