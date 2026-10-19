@@ -5,110 +5,95 @@ description: Use when work starts or stops on a tracked effort - starting an eff
 
 # Recording work time
 
-Strict and mechanical. Do these things at these moments. No judgement calls,
-no interpretation, no estimation reasoning — this skill exists so that
-referencing it does not pull estimation ideas into a working session.
+Strict and mechanical. Do these things at these moments. No judgement calls, no interpretation, no estimation reasoning
+— this skill exists so that referencing it does not pull estimation ideas into a working session.
 
 ## Starting an effort
 
 `start_effort(title, kind, plan_path, summary_text, optimistic, likely,
-pessimistic, rationale, work_slices)` creates the effort and takes the plan's
-slice titles up front, as `work_slices`, a list of titles. This is not
-incidental: the initial slice count is what makes later drift measurable.
-Do not create the effort with an empty slice list and add slices afterwards
-to get to the plan's real inventory — that throws away the baseline. Once the
-effort is under way, `add_slice` is for slices that were not in that original
-list — scope growth, not initial setup.
+pessimistic, rationale, work_slices)` creates
+the effort and takes the plan's slice titles up front, as `work_slices`, a list of titles. This is not incidental: the
+initial slice count is what makes later drift measurable. Do not create the effort with an empty slice list and add
+slices afterwards to get to the plan's real inventory — that throws away the baseline. Once the effort is under way,
+`add_slice` is for slices that were not in that original list — scope growth, not initial setup.
 
 ## When to clock in
 
 - Starting work on a slice: `clock_in(effort, work_slice)`.
-- Starting effort-level work with no slice — a design conversation, a
-  retrospective: `clock_in(effort)`.
-- A meeting that is part of the work: `clock_in(effort, kind="meeting",
+- Starting effort-level work with no slice — a design conversation, a retrospective: `clock_in(effort)`.
+- A meeting that is part of the work:
+  `clock_in(effort, kind="meeting",
   internal=<people we pay for, including the user>, external=<people we do not>,
   participants=<names, if known now>)`.
 
-`clock_in` refuses when an interval is already open. That refusal is correct;
-clock out first rather than working around it.
+`clock_in` refuses when an interval is already open. That refusal is correct; clock out first rather than working around
+it.
 
-`clock_in` also refuses when `work_slice` is given but is not a live slice on
-that effort — dropped, or simply mistyped — raising `UnknownSlice`. A stale
-slice identifier is a plausible mistake mid-effort; treat the refusal as a
-prompt to check the identifier, not as something to route around. A *closed*
-slice is still clockable, deliberately: a merged pull request can still need
-post-merge fixes, and that time belongs to the slice it came from.
+`clock_in` also refuses when `work_slice` is given but is not a live slice on that effort — dropped, or simply mistyped
+— raising `UnknownSlice`. A stale slice identifier is a plausible mistake mid-effort; treat the refusal as a prompt to
+check the identifier, not as something to route around. A _closed_ slice is still clockable, deliberately: a merged pull
+request can still need post-merge fixes, and that time belongs to the slice it came from.
 
-If the names were not to hand when clocking into the meeting, `participants`
-can be left out and attached later — or corrected — with
-`annotate_interval(effort, interval, internal=, external=, participants=,
-note=)`. It works on any interval, not only meetings, and is also the way to
-attach a note after the fact.
+If the names were not to hand when clocking into the meeting, `participants` can be left out and attached later — or
+corrected — with `annotate_interval(effort, interval, internal=, external=, participants=,
+note=)`. It works on any
+interval, not only meetings, and is also the way to attach a note after the fact.
 
 ## When to clock out
 
 - Finishing for the session, or switching slices: `clock_out()`.
-- Forgot, and remembered later: `clock_out(at="<ISO 8601>")`. A timestamp
-  earlier than the clock-in is refused rather than recorded as a session of
-  zero length — check the date when that happens.
+- Forgot, and remembered later: `clock_out(at="<ISO 8601>")`. A timestamp earlier than the clock-in is refused rather
+  than recorded as a session of zero length — check the date when that happens.
 
-A timer left running is closed by the `SessionEnd` hook, clamped to the
-configured quit time. That is a normal outcome, not a failure — the model
-assumes a normal day and only deviations need recording. The hook drives the
-`estimate-maestro-cli` clock-out command, whose exit code tells the calling
-script what happened: `0` means it clocked out successfully, `1` means a real
-error, and `3` means nothing was clocked in — expected and frequent, not a
-failure. Anyone wiring the hook should treat `3` the same as `0`, not as an
-error to surface.
+Nothing closes a timer left running. When `current()` shows one still open long after the work stopped, close it with
+`clock_out(at="<ISO 8601>")` if the moment the work stopped is known. If it is not, the user can run
+`estimate-maestro-cli clock-out --at-last-activity <moment>`, which clamps the interval to the end of the working day it
+started in — that is the working-hours model doing its job, not a failure. The command exits `0` when it clocked out,
+`1` on a real error, and `3` when nothing was clocked in, which is expected rather than an error to surface.
 
 Clocking out does not harvest commits. `harvest_commits(effort, work_slice,
-path, since, until)` is a separate, explicit call that copies commit metadata
-from a working tree into the store — call it yourself when it is due; nothing
-triggers it automatically.
+path, since, until)` is a separate, explicit
+call that copies commit metadata from a working tree into the store — call it yourself when it is due; nothing triggers
+it automatically.
 
-`since` is the clock-in moment, and `current()` is the only thing that reports
-it — after `clock_out` it is gone from there. So the order is: call `current()`
-and **keep the `since` it gives you**, then `clock_out()`, then
-`harvest_commits(..., since=<the kept moment>, until=<now>)`. A guessed window
-loses commits at one end or appends unrelated ones at the other, and neither is
-visible afterwards.
+`since` is the clock-in moment, and `current()` is the only thing that reports it — after `clock_out` it is gone from
+there. So the order is: call `current()` and **keep the `since` it gives you**, then `clock_out()`, then
+`harvest_commits(..., since=<the kept moment>, until=<now>)`. A guessed window loses commits at one end or appends
+unrelated ones at the other, and neither is visible afterwards.
 
 ## When to record a deviation
 
-- Time genuinely not worked — vacation, an appointment, an unrelated meeting,
-  or anything else that does not fit those: `record_absence(start, stop,
-  kind)`, where `kind` is one of `vacation`, `appointment`,
-  `unrelated_meeting`, or `other`. Retroactive is expected and fine.
+- Time genuinely not worked — vacation, an appointment, an unrelated meeting, or anything else that does not fit those:
+  `record_absence(start, stop,
+  kind)`, where `kind` is one of `vacation`, `appointment`, `unrelated_meeting`, or
+  `other`. Retroactive is expected and fine.
 - An interval whose bounds were simply wrong: `repair_interval(effort,
-  interval, start, stop)`. It works on a *closed* interval only — repairing one
-  that is still running is refused, because the repair would be recorded and
-  then read by nothing. Close it with `clock_out(at=...)` first, and repair
-  afterwards if the bounds still need moving.
+  interval, start, stop)`. It works on a _closed_
+  interval only — repairing one that is still running is refused, because the repair would be recorded and then read by
+  nothing. Close it with `clock_out(at=...)` first, and repair afterwards if the bounds still need moving.
 
-Absence and repair are different: an absence says nobody was working anywhere
-between those times; a repair says one specific interval was recorded wrongly.
+Absence and repair are different: an absence says nobody was working anywhere between those times; a repair says one
+specific interval was recorded wrongly.
 
 ## When to record scope movement
 
-- A slice appears that was not in the plan: `add_slice(effort, title)`, then
-  ask the user for a revised estimate and call `record_revision`. A slice
-  inserted mid-flight is the cheapest moment to make drift visible.
+- A slice appears that was not in the plan: `add_slice(effort, title)`, then ask the user for a revised estimate and
+  call `record_revision`. A slice inserted mid-flight is the cheapest moment to make drift visible.
 - A slice turns out to be unnecessary: `drop_slice(effort, work_slice, reason)`.
 - A slice's title needs correcting: `rename_slice(effort, work_slice, title)`.
-- A slice's pull request merges: `close_slice(effort, work_slice, pull_request)`,
-  then `record_landed_commit` with the squash commit on the default branch.
+- A slice's pull request merges: `close_slice(effort, work_slice, pull_request)`, then `record_landed_commit` with the
+  squash commit on the default branch.
 - History was rewritten by a rebase, amend, or fixup: `remap_commits(effort,
   old, new, reason)`.
 
 ## At the retrospective
 
 `record_final_plan(effort, plan_path, summary_text, optimistic, likely,
-pessimistic, rationale)`, then `finish_effort(effort)`.
+pessimistic, rationale)`, then
+`finish_effort(effort)`.
 
-`finish_effort` refuses while an interval is still open on that effort, naming
-it. That is the last moment the forgotten timer can still be closed at the right
-time; finished around it, the effort would record no time at all.
+`finish_effort` refuses while an interval is still open on that effort, naming it. That is the last moment the forgotten
+timer can still be closed at the right time; finished around it, the effort would record no time at all.
 
-**Never show the user a wall-time total during any of the above.** The
-recording tools do not return one. Do not compute one yourself, and do not call
-a calibration tool in a session where an estimate is being made.
+**Never show the user a wall-time total during any of the above.** The recording tools do not return one. Do not compute
+one yourself, and do not call a calibration tool in a session where an estimate is being made.
