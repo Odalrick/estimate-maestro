@@ -88,24 +88,27 @@ of this shape next time?
 A normal working day is assumed by default. Clocking in and out is still the ordinary workflow, but a missed clock-out
 should self-heal with reasonable accuracy rather than leaving a hole in the record.
 
-The assumed day is 09:00–17:00, with one hour of lunch. That is under eight hours on purpose: the shortfall accounts for
-meetings and other time not spent on the project.
+The assumed day is 09:00–17:00, with one hour of lunch, Monday to Friday. That is under eight hours on purpose: the
+shortfall accounts for meetings and other time not spent on the project.
 
 - **Manually clocked time counts in full**, whatever hours it falls in. Evenings and weekends included: if you clocked
   in at 22:00 on a Saturday, that is what gets recorded, with no working-hours adjustment applied to it.
 - **The working-hours model only ever applies where timestamps are missing.** There are exactly two places it is used:
-  - **Ending a forgotten timer.** If a session ends with the clock still running, the interval is closed at the
-    configured end of the day rather than staying open indefinitely.
+  - **Ending a forgotten timer.** If a session ends with the clock still running, the interval is closed at the end of
+    the working day it started in. A session that started outside working hours — before 09:00, from 17:00 on, or on a
+    day that is not a working day — has no working day to close against, so it is capped at four hours instead.
   - **Reconstructing intervals from commit timestamps** when nothing was ever clocked in for a slice. A cluster of
     nearby commits becomes a derived working session, using the working-hours model to decide how much of the span
     between them counts as work rather than an overnight gap.
 
-Every calendar day carries the same working hours; there is no concept of a non-working day. So the session started at
-22:00 on the Saturday but never ended is considered ended at 17:00 on the Sunday. That is of course an unreasonable time
-to record and unlikely to be accurate, but the simplicity makes the effects predictable, and it bounds the damage at
-roughly a day: a session left running from 17:01 on a Friday closes at 17:00 on the Saturday, rather than accruing
-credit all the way to Monday. The expectation is that the tooling "remembers" the clock-out for you, so the fallback is
-rarely reached, and more reasonable times can usually be reconstructed from commit logs after the fact.
+So the session started at 22:00 on the Saturday but never ended is considered ended at 02:00 on the Sunday, and one left
+running from 17:01 on a Friday closes at 21:01 that evening rather than accruing credit all the way to Monday. Either is
+unlikely to be accurate, but both are predictable and bound the damage. The expectation is that the tooling "remembers"
+the clock-out for you, so the fallback is rarely reached, and more reasonable times can usually be reconstructed from
+commit logs after the fact.
+
+A derived session counts only working time, so commits made outside working hours or on a non-working day produce a
+derived interval worth nothing. Clocking in is the way to have evening and weekend work counted.
 
 An absence recorded over a span subtracts from any interval — clocked or derived — that it overlaps: in full from a
 manually clocked interval, and through the same reconstruction that produced a derived one.
@@ -124,7 +127,8 @@ Every tool the MCP server exposes falls into exactly one category:
 
 **Recording, estimation and status tools never return a duration or an aggregate. Only calibration tools may.** This is
 enforced structurally: every response model used by a recording, estimation or status tool is checked for field names
-containing `hours`, `minutes`, `duration`, `wall`, `average`, or `share`, and the check fails if one is found.
+containing words such as `hours`, `minutes`, `duration`, `wall`, `average`, or `share`, and the check fails if one is
+found.
 
 The reason is narrower than it can look. An estimate made just after seeing the real duration of the work is an anchored
 echo of that duration rather than an independent judgement; the concrete case to avoid is a final estimate landing on 10
@@ -143,16 +147,21 @@ everything needed is recorded.
 All are optional; every one has a default. Read from `src/estimate_maestro/config.py`, not from this list, if the two
 ever disagree.
 
-| Variable                       | Default                                                                              | Meaning                                                        |
-| ------------------------------ | ------------------------------------------------------------------------------------ | -------------------------------------------------------------- |
-| `ESTIMATE_MAESTRO_STORE`       | `$XDG_DATA_HOME/estimate-maestro`, falling back to `~/.local/share/estimate-maestro` | Path to the store directory.                                   |
-| `ESTIMATE_MAESTRO_DAY_START`   | `09:00`                                                                              | Start of the working day (ISO 8601 time).                      |
-| `ESTIMATE_MAESTRO_DAY_END`     | `17:00`                                                                              | End of the working day (ISO 8601 time).                        |
-| `ESTIMATE_MAESTRO_LUNCH_START` | `12:00`                                                                              | Start of the daily lunch break, excluded from working seconds. |
-| `ESTIMATE_MAESTRO_LUNCH_END`   | `13:00`                                                                              | End of the daily lunch break.                                  |
+| Variable                                         | Default                                                                              | Meaning                                                                                                          |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| `ESTIMATE_MAESTRO_STORE`                         | `$XDG_DATA_HOME/estimate-maestro`, falling back to `~/.local/share/estimate-maestro` | Path to the store directory.                                                                                     |
+| `ESTIMATE_MAESTRO_DAY_START`                     | `09:00`                                                                              | Start of the working day (ISO 8601 time).                                                                        |
+| `ESTIMATE_MAESTRO_DAY_END`                       | `17:00`                                                                              | End of the working day (ISO 8601 time).                                                                          |
+| `ESTIMATE_MAESTRO_LUNCH_START`                   | `12:00`                                                                              | Start of the daily lunch break, excluded from working seconds.                                                   |
+| `ESTIMATE_MAESTRO_LUNCH_END`                     | `13:00`                                                                              | End of the daily lunch break.                                                                                    |
+| `ESTIMATE_MAESTRO_WORKDAYS`                      | `0,1,2,3,4`                                                                          | Comma-separated weekdays counted as working days (Monday `0` … Sunday `6`).                                      |
+| `ESTIMATE_MAESTRO_OFF_HOURS_SESSION_CAP_MINUTES` | `240` (4 hours)                                                                      | Maximum length given to a forgotten timer that started outside working hours.                                    |
+| `ESTIMATE_MAESTRO_DERIVE_LEAD_IN_MINUTES`        | `30`                                                                                 | Time added before the earliest commit in a derived session, to cover work done before the first commit.          |
+| `ESTIMATE_MAESTRO_DERIVE_SESSION_GAP_MINUTES`    | `120` (2 hours)                                                                      | Working-time gap between commits beyond which a derived session is considered to have ended and a new one begun. |
+| `ESTIMATE_MAESTRO_MINIMUM_EFFORTS`               | `5`                                                                                  | Minimum number of recorded efforts before `summary` reports figures rather than an honest refusal.               |
 
-The working-hours model has no other levers: the day boundaries and the lunch break are the whole of it. Anything more
-would be collecting configuration for its own sake.
+`ESTIMATE_MAESTRO_DERIVE_LEAD_IN_MINUTES` must not exceed `ESTIMATE_MAESTRO_DERIVE_SESSION_GAP_MINUTES`; the server
+refuses to start otherwise.
 
 ## The command-line tool
 
